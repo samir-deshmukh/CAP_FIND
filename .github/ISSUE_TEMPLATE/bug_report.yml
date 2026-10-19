@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a reproducible defect with evidence and impact.
+title: "[Bug]: "
+labels: ["type:bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include passwords, tokens, personal data, private PDFs, or production database records."
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is wrong? State the observed behavior, not only the suspected cause.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Use a local/test environment and synthetic or sanitized inputs.
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Safe logs, error messages, commit SHA, test results, screenshots with sensitive data removed.
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact
+      options:
+        - Candidate-facing incorrect result
+        - Import or data-integrity risk
+        - Security or privacy risk
+        - Availability or performance
+        - Admin workflow
+        - Documentation or developer workflow
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What must be true for the issue to be considered fixed?
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checks
+      options:
+        - label: I did not include secrets, personal data, or private source files.
+          required: true
+        - label: This report does not ask anyone to test against production data.
+          required: true
