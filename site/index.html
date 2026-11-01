@@ -1,0 +1,3762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>CETFind — Maharashtra CET CAP College Finder</title>
+<meta name="description" content="CETFind helps Maharashtra CET candidates explore college options using published historical CAP cutoff and seat-matrix data, with search tools for supported courses, percentile and city.">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="https://cetfind.onrender.com/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="CETFind — Maharashtra CET CAP College Finder">
+<meta property="og:description" content="Explore Maharashtra CET college options using published historical CAP cutoff and seat-matrix data for supported courses.">
+<meta property="og:url" content="https://cetfind.onrender.com/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="CETFind — Maharashtra CET CAP College Finder">
+<meta name="twitter:description" content="Explore Maharashtra CET college options using published historical CAP cutoff and seat-matrix data for supported courses.">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="theme-color" content="#0B0B0F">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "CETFind",
+  "url": "https://cetfind.onrender.com/",
+  "description": "A college-finder and decision-support tool for Maharashtra CET CAP candidates using historical cutoff and seat-matrix data.",
+  "applicationCategory": "EducationalApplication",
+  "operatingSystem": "Web",
+  "inLanguage": "en-IN",
+  "publisher": { "@type": "Organization", "name": "CETFind" },
+  "isAccessibleForFree": true
+}
+</script>
+
+<!-- Google Fonts: Fraunces (serif headings), Inter (body), JetBrains Mono (numbers/code) -->
+<!-- Local/system fonts: avoid an external render-time font dependency. -->
+
+
+<!-- Public data is fetched from the PostgreSQL-backed API. No cutoff/seat dataset is embedded in this page. -->
+<script>window.__PORTABLE_DATA_READY__ = Promise.resolve(false);</script>
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   ██  SECTION 1: RESET & CSS VARIABLES
+   ───────────────────────────────────────────────────────────────────
+   A "reset" removes default browser spacing. The variables below are
+   the site's design tokens — change them once to re-theme everything.
+   ═══════════════════════════════════════════════════════════════════ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  /* Ink = dark colors (text, buttons) */
+  --ink-900: #11120D; --ink-800: #11120D;
+  /* Paper = light colors (backgrounds, borders) */
+  --paper-50: #FFFBF4; --paper-100: #FFFBF4; --paper-200: #D8CFBC;
+  --paper-300: #D8CFBC; --paper-400: #D8CFBC; --paper-500: #D8CFBC;
+  --paper-600: #11120D; --paper-700: #11120D; --paper-800: #11120D;
+
+  /* ─── CUSTOMISABLE KNOBS ─── */
+  --radius-card: 24px;      /* rounded corners on big cards */
+  --radius-input: 12px;     /* rounded corners on inputs/buttons */
+  --drawer-speed: 0.38s;    /* how fast the slide opens/closes */
+  --drawer-max: 1000px;     /* max width of content column inside slide */
+}
+
+html { scroll-behavior: smooth; }  /* smooth scroll when clicking #anchors */
+
+body {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--paper-100);
+  color: var(--paper-800);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;   /* prevents horizontal scrollbar from off-screen elements */
+}
+
+/* JS adds this class when the slide is open, to lock page scrolling */
+body.no-scroll { overflow: hidden; }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  SECTION 2: FIXED SKETCH BACKGROUND
+   ───────────────────────────────────────────────────────────────────
+   The faint paper grid + tortoises + birds that sit behind everything.
+   position:fixed means they stay put while the page scrolls.
+   z-index:0 keeps them behind the page content (which is z-index:10).
+   ═══════════════════════════════════════════════════════════════════ */
+
+.sketch-bg {
+  position: fixed; inset: 0;   /* inset:0 = top/right/bottom/left all 0 */
+  z-index: 0;
+  pointer-events: none;        /* clicks pass through to the page */
+  overflow: hidden;
+  background: var(--paper-100);
+}
+
+/* The graph-paper grid drawn as two repeating linear gradients */
+.sketch-bg::after {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(11,11,15,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11,11,15,0.05) 1px, transparent 1px);
+  background-size: 48px 48px;  /* grid square size */
+}
+
+/* ─── Tortoise 1: big one in the center ─── */
+.tortoise-main {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);       /* centers it */
+  width: 26vw; max-width: 320px; min-width: 200px;
+  opacity: 0.35; color: var(--ink-900);
+}
+/* ─── Tortoise 2: top-right, tilted ─── */
+.tortoise-tr {
+  position: absolute; top: 8%; right: 6%;
+  width: 14vw; max-width: 180px; min-width: 100px;
+  opacity: 0.30; color: var(--ink-900);
+  transform: rotate(-12deg);
+}
+/* ─── Tortoise 3: bottom-left, tilted the other way ─── */
+.tortoise-bl {
+  position: absolute; bottom: 8%; left: 5%;
+  width: 16vw; max-width: 200px; min-width: 110px;
+  opacity: 0.32; color: var(--ink-900);
+  transform: rotate(8deg);
+}
+.tortoise-svg { width: 100%; height: auto; overflow: visible; }
+
+/* ─── Birds: 8 of them scattered around, all static (no animation) ─── */
+.bird { position: absolute; color: var(--ink-900); height: auto; }
+.bird-1 { top: 12%; left: 8%;   width: 34px; opacity: 0.45; }
+.bird-2 { top: 20%; left: 22%;  width: 26px; opacity: 0.35; }
+.bird-3 { top: 8%;  right: 20%; width: 38px; opacity: 0.50; }
+.bird-4 { top: 32%; right: 8%;  width: 28px; opacity: 0.40; }
+.bird-5 { top: 72%; left: 10%;  width: 34px; opacity: 0.45; }
+.bird-6 { top: 80%; right: 18%; width: 30px; opacity: 0.38; }
+.bird-7 { top: 45%; left: 4%;   width: 24px; opacity: 0.35; }
+.bird-8 { top: 60%; right: 5%;  width: 26px; opacity: 0.42; }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  SECTION 3: PAGE CONTENT WRAPPER + TOPBAR
+   ───────────────────────────────────────────────────────────────────
+   .page-content lifts all real content above the background (z-index:10).
+   .topbar is the sticky bar at the top with brand + nav + CTA.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.page-content { position: relative; z-index: 10; }
+
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: rgba(248,248,246,0.75);       /* semi-transparent */
+  backdrop-filter: saturate(180%) blur(20px);  /* frosted-glass effect */
+  -webkit-backdrop-filter: saturate(180%) blur(20px); /* Safari */
+  border-bottom: 1px solid rgba(232,232,228,0.7);
+  padding: 0 48px; height: 64px;
+  display: flex; align-items: center; justify-content: space-between;
+  z-index: 1000;
+}
+.topbar-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; color: var(--ink-900); }
+.topbar-mark {                                /* the dark square logo mark */
+  width: 32px; height: 32px;
+  background: var(--ink-900); color: var(--paper-50);
+  border-radius: 8px;
+  display: grid; place-items: center;
+  flex-shrink: 0;
+}
+.topbar-mark svg { width: 22px; height: 22px; }
+.topbar-nav { display: flex; gap: 32px; font-size: 13.5px; color: var(--paper-700); font-weight: 500; }
+.topbar-nav a { text-decoration: none; color: inherit; transition: color 0.15s; }
+.topbar-nav a:hover { color: var(--ink-900); }
+.topbar-cta {                                 /* the black "Get Started" button */
+  padding: 9px 18px;
+  background: var(--ink-900); color: var(--paper-50);
+  border-radius: 8px; font-size: 13px; font-weight: 500;
+  border: none; cursor: pointer; font-family: inherit;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  SECTION 4: HERO (the big headline at the top)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.hero {
+  padding: 160px 48px 100px;   /* 160px top = clears the fixed topbar */
+  min-height: 90vh;
+  display: flex; align-items: center;
+  background: transparent;     /* so the background grid shows through */
+}
+.hero-inner { max-width: 1240px; margin: 0 auto; width: 100%; }
+
+.hero-eyebrow {              /* the small pill: "NEW · 2024 Round 1..." */
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px 6px 6px;
+  background: rgba(253,253,253,0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(232,232,228,0.8); border-radius: 100px;
+  font-size: 12.5px; color: var(--paper-700); font-weight: 500;
+  margin-bottom: 32px;
+}
+.hero-eyebrow span {        /* the black "NEW" tag inside the pill */
+  padding: 3px 8px;
+  background: var(--ink-900); color: var(--paper-50);
+  border-radius: 100px; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.05em; text-transform: uppercase;
+}
+
+.hero h1 {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(40px, 8vw, 108px);  /* grows between 40px and 108px */
+  font-weight: 600; line-height: 0.98; letter-spacing: -0.035em;
+  margin-bottom: 28px; color: var(--ink-900);
+  text-shadow: 0 2px 20px rgba(248,248,246,0.8);  /* halo so text stays readable over tortoise */
+}
+.hero h1 em { font-style: italic; font-weight: 400; color: var(--paper-600); }
+
+.hero-lede {                /* the paragraph under the headline */
+  font-size: clamp(15px, 2vw, 18px); line-height: 1.6;
+  color: var(--paper-700); max-width: 520px;
+  margin-bottom: 40px;
+  text-shadow: 0 1px 12px rgba(248,248,246,0.9);
+}
+
+.hero-actions { display: flex; gap: 12px; margin-bottom: 64px; flex-wrap: wrap; }
+.hero-actions .knowledge-link { color: var(--ink-900); text-decoration: none; display: inline-flex; align-items: center; padding: 16px 6px; font-size: 14.5px; font-weight: 600; }
+.hero-actions .knowledge-link:hover { color: var(--ink-700); text-decoration: underline; text-underline-offset: 4px; }
+.seo-directory { padding: 34px 0 72px; }
+.seo-directory-inner { max-width: 1240px; margin: 0 auto; padding: 0 48px; }
+.seo-directory-card { display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 30px 34px; border: 1px solid var(--paper-300); background: var(--paper-50); border-radius: 18px; }
+.seo-directory-copy h2 { margin: 0 0 8px; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(25px, 3vw, 38px); font-weight: 600; letter-spacing: -0.025em; }
+.seo-directory-copy p { margin: 0; max-width: 720px; color: var(--ink-700); line-height: 1.65; font-size: 14px; }
+.seo-directory-link { flex: 0 0 auto; display: inline-flex; align-items: center; padding: 13px 18px; border-radius: 999px; background: var(--ink-900); color: var(--paper-50) !important; text-decoration: none; font-size: 13px; font-weight: 700; }
+.seo-directory-link:hover { opacity: .86; }
+@media (max-width: 760px) {
+  .seo-directory-inner { padding: 0 20px; }
+  .seo-directory-card { align-items: flex-start; flex-direction: column; padding: 24px; }
+}
+
+
+/* ─── Two button styles: solid black + frosted white ─── */
+.btn-primary {
+  padding: 16px 26px;
+  background: var(--ink-900); color: var(--paper-50);
+  border: none; border-radius: var(--radius-input);
+  font-size: 14.5px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 10px;
+  transition: all 0.25s;
+  box-shadow: 0 8px 24px rgba(11,11,15,0.15);
+}
+.btn-primary:hover { background: var(--ink-800); transform: translateY(-2px); box-shadow: 0 16px 32px rgba(11,11,15,0.2); }
+
+.btn-ghost {
+  padding: 16px 26px;
+  background: rgba(253,253,253,0.85);
+  backdrop-filter: blur(12px);
+  color: var(--ink-900);
+  border: 1px solid rgba(232,232,228,0.9);
+  border-radius: var(--radius-input);
+  font-size: 14.5px; font-weight: 500;
+  cursor: pointer; font-family: inherit;
+  transition: all .2s;
+}
+.btn-ghost:hover { background: var(--paper-50); transform: translateY(-2px); }
+
+/* ─── Hero stat bar: 4 numbers in a row (100 Colleges, 531 Records, etc.) ─── */
+.hero-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr);  /* 4 equal columns */
+  gap: 1px;                                             /* gap = the border line */
+  background: rgba(232,232,228,0.6);                    /* shows through the gaps */
+  border: 1px solid rgba(232,232,228,0.8);
+  border-radius: 16px; overflow: hidden;
+  backdrop-filter: blur(12px);
+}
+.hero-stat { padding: 24px; background: rgba(253,253,253,0.7); backdrop-filter: blur(12px); }
+.hero-stat-num {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(28px, 4vw, 44px); font-weight: 600;
+  line-height: 1; letter-spacing: -0.03em;
+  display: block; margin-bottom: 6px;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;   /* even-width digits, no jitter */
+}
+.hero-stat-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--paper-600); font-weight: 600; }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  SECTION 5: GENERIC SECTIONS + HEADINGS
+   ───────────────────────────────────────────────────────────────────
+   Used by Step 01 (search) and Step 02 (results).
+   ═══════════════════════════════════════════════════════════════════ */
+
+.section { padding: 100px 48px; position: relative; background: transparent; }
+.section-inner { max-width: 1240px; margin: 0 auto; }
+
+.section-head {                     /* eyebrow + title on left, desc on right */
+  display: flex; align-items: flex-end; justify-content: space-between;
+  margin-bottom: 56px; gap: 40px; flex-wrap: wrap;
+}
+.section-eyebrow {                  /* "STEP 01" with a line before it */
+  display: flex; align-items: center; gap: 10px;
+  font-size: 12px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--paper-600);
+  margin-bottom: 20px;
+}
+.section-eyebrow::before {          /* the short line before "STEP 01" */
+  content: ''; width: 24px; height: 1px; background: currentColor;
+}
+.section-title {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(28px, 5vw, 60px); font-weight: 600;
+  line-height: 1.05; letter-spacing: -0.03em;
+  color: var(--ink-900); max-width: 720px;
+  text-shadow: 0 2px 16px rgba(248,248,246,0.7);
+}
+.section-title em { font-style: italic; font-weight: 400; color: var(--paper-600); }
+.section-desc { font-size: 15px; color: var(--paper-700); max-width: 420px; line-height: 1.6; text-shadow: 0 1px 12px rgba(248,248,246,0.9); }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  SECTION 6: SEARCH CARD (Step 01)
+   ───────────────────────────────────────────────────────────────────
+   Contains: the percentile input (big typable number), the city dropdown,
+   the course dropdown, and the search button.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.search-card {
+  background: rgba(253,253,253,0.75);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border: 1px solid rgba(232,232,228,0.9);
+  border-radius: var(--radius-card);
+  padding: 48px;
+  box-shadow: 0 24px 60px rgba(11,11,15,0.06);
+}
+
+/* Two-column area: left = percentile input, right = tip text */
+.percentile-row {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  padding-bottom: 48px;
+  border-bottom: 1px solid rgba(241,241,238,0.9);
+  margin-bottom: 40px;
+  align-items: center;
+}
+/* The left block has a vertical divider on its right edge */
+.percentile-block { padding-right: 40px; border-right: 1px solid rgba(241,241,238,0.9); }
+
+/* Small uppercase label like "YOUR CET PERCENTILE" */
+.field-label {
+  font-size: 12px; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--paper-600);
+  margin-bottom: 16px; display: block;
+}
+
+/* ─── The big typable percentile number ─── */
+.percentile-value {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(56px, 9vw, 96px);
+  font-weight: 600; line-height: 1;
+  letter-spacing: -0.05em;
+  color: var(--ink-900);
+  font-variant-numeric: tabular-nums;
+  display: flex; align-items: flex-start;
+}
+.percentile-value input {
+  /* Inherit all the big typography from parent */
+  font: inherit; color: inherit; letter-spacing: inherit;
+  background: transparent;
+  border: none; outline: none;
+  width: 100%; max-width: 300px;
+  padding: 0 0 6px;
+  border-bottom: 2px dashed var(--paper-400);  /* the underline */
+  transition: border-color .2s;
+}
+.percentile-value input:hover,
+.percentile-value input:focus { border-bottom-color: var(--ink-900); }
+
+/* Hide the little up/down arrows Chrome puts on number inputs */
+.percentile-value input::-webkit-outer-spin-button,
+.percentile-value input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.percentile-value input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+/* The little "%" sign that appears after the input */
+.percentile-value sup { font-size: 32px; font-weight: 400; color: var(--paper-500); margin-top: 8px; margin-left: 6px; }
+
+/* Small caption under the input: "Click and type your exact percentile" */
+.percentile-caption { font-size: 12px; color: var(--paper-500); font-weight: 500; margin-top: 14px; letter-spacing: 0.02em; }
+
+/* ─── Two-column dropdown grid (City + Course) ─── */
+.fields-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+
+.field { position: relative; }   /* needed so the arrow can be positioned absolutely */
+.field select {
+  width: 100%;
+  padding: 16px 44px 16px 20px;   /* right padding leaves room for the arrow */
+  border: 1px solid rgba(232,232,228,0.9);
+  border-radius: var(--radius-input);
+  background: rgba(253,253,253,0.85);
+  font-family: inherit; font-size: 15px; font-weight: 500;
+  color: var(--ink-900);
+  cursor: pointer;
+  appearance: none;               /* hide the browser's default arrow */
+  -webkit-appearance: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+.field select:focus { outline: none; border-color: var(--ink-900); box-shadow: 0 0 0 4px rgba(11,11,15,0.06); }
+
+/* Field is now single-column since the tip/helper text beside it was removed */
+.percentile-row-solo { grid-template-columns: 1fr; }
+.percentile-block { max-width: 420px; }
+
+/* Invalid-percentile state */
+.percentile-value input.field-invalid { border-bottom-color: #B23A3A; }
+#pctCaption.field-invalid-caption { color: #B23A3A; }
+
+/* Custom dropdown arrow drawn with clip-path (a triangle) */
+.field::after {
+  content: '';
+  position: absolute; right: 20px; top: 50%;
+  transform: translateY(-50%);
+  width: 10px; height: 6px;
+  background: var(--paper-600);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  pointer-events: none;   /* clicks pass through to the select */
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Searchable-select component (.ssel) — used for City, Course, Branch,
+   Category and Quota/Type everywhere in the app. Wraps a hidden native
+   <select>; the panel is always the same fixed size and its option
+   list scrolls once there are more items than fit, so every dropdown
+   in the app looks and behaves identically.
+   ═══════════════════════════════════════════════════════════════════ */
+.ssel { position: relative; }
+select.ssel-native { display: none; }
+
+.ssel-btn {
+  width: 100%; text-align: left;
+  padding: 16px 44px 16px 20px;
+  border: 1px solid rgba(232,232,228,0.9);
+  border-radius: var(--radius-input);
+  background: rgba(253,253,253,0.85);
+  font-family: inherit; font-size: 15px; font-weight: 500;
+  color: var(--ink-900);
+  cursor: pointer;
+  transition: border-color .2s, box-shadow .2s;
+}
+.ssel-btn.placeholder { color: var(--paper-500); font-weight: 400; }
+.ssel-btn:focus { outline: none; border-color: var(--ink-900); box-shadow: 0 0 0 4px rgba(11,11,15,0.06); }
+.ssel.disabled .ssel-btn { opacity: 0.5; cursor: not-allowed; }
+.ssel.open .ssel-btn { border-color: var(--ink-900); }
+
+/* Fixed-size panel — same dimensions no matter which field it belongs to */
+.ssel-panel {
+  display: none;
+  position: absolute; left: 0; right: 0; top: calc(100% + 6px);
+  z-index: 40;
+  width: 100%; height: 280px;
+  background: #fff;
+  border: 1px solid rgba(232,232,228,0.9);
+  border-radius: var(--radius-input);
+  box-shadow: 0 24px 48px rgba(11,11,15,0.14);
+  overflow: hidden;
+  flex-direction: column;
+}
+.ssel.open .ssel-panel { display: flex; }
+/* Keep the full option panel inside the visible screen when the field is near the bottom. */
+.ssel.open-up .ssel-panel { top: auto; bottom: calc(100% + 6px); }
+
+.ssel-search { padding: 10px; border-bottom: 1px solid rgba(241,241,238,0.9); flex: none; }
+.ssel-search input {
+  width: 100%; padding: 10px 12px;
+  border: 1px solid rgba(232,232,228,0.9); border-radius: 8px;
+  font-family: inherit; font-size: 14px;
+  background: var(--paper-50, #FAFAF8);
+}
+.ssel-search input:focus { outline: none; border-color: var(--ink-900); }
+
+/* The list itself is what scrolls — fixed height, own scrollbar */
+.ssel-list { flex: 1 1 auto; overflow-y: auto; padding: 6px; }
+.ssel-item {
+  display: block; width: 100%; border: 0; background: transparent; text-align: left; font-family: inherit;
+  padding: 11px 14px; border-radius: 8px;
+  font-size: 14.5px; color: var(--ink-900);
+  cursor: pointer;
+}
+.ssel-item:hover { background: rgba(11,11,15,0.05); }
+.ssel-item.active { background: var(--ink-900); color: #fff; font-weight: 600; }
+.ssel-empty { padding: 20px 14px; text-align: center; color: var(--paper-500); font-size: 14px; }
+
+/* Big black search button */
+.search-submit {
+  width: 100%; padding: 22px; margin-top: 40px;
+  background: var(--ink-900); color: var(--paper-50);
+  border: none; border-radius: 14px;
+  font-family: inherit; font-size: 15.5px; font-weight: 600;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: all .25s;
+}
+.search-submit:hover { background: var(--ink-800); transform: translateY(-2px); box-shadow: 0 20px 40px rgba(11,11,15,0.2); }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  SECTION 7: RESULTS (Step 02) — the college list table
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Top strip of the table: "42 colleges match" + sort chips */
+.results-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 24px 32px;
+  background: rgba(253,253,253,0.75);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(232,232,228,0.9);
+  border-radius: 16px 16px 0 0;    /* rounded top only */
+  border-bottom: none;             /* the table below provides the bottom border */
+  flex-wrap: wrap; gap: 16px;
+}
+.results-count strong { font-family: Georgia, 'Times New Roman', serif; font-size: 28px; font-weight: 600; color: var(--ink-900); margin-right: 8px; }
+.results-count span { color: var(--paper-700); font-size: 13.5px; font-weight: 500; }
+
+.chip-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {                              /* sort buttons: "Cutoff ↓", "Name A–Z" */
+  padding: 9px 16px;
+  background: rgba(253,253,253,0.8);
+  border: 1px solid rgba(232,232,228,0.9);
+  border-radius: 10px;
+  font-size: 13px; font-weight: 500; color: var(--paper-700);
+  cursor: pointer; font-family: inherit;
+  transition: all .18s;
+}
+.chip:hover { border-color: var(--paper-500); color: var(--ink-900); }
+.chip.active { background: var(--ink-900); color: var(--paper-50); border-color: var(--ink-900); }
+
+/* The white card wrapping the <table> */
+.table-wrap {
+  background: rgba(253,253,253,0.75);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(232,232,228,0.9);
+  border-radius: 0 0 16px 16px;   /* rounded bottom only */
+  overflow-x: auto;              /* horizontal scroll on narrow screens */
+}
+table { width: 100%; border-collapse: collapse; min-width: 760px; }
+
+thead th {                          /* table header row */
+  text-align: left;
+  padding: 18px 20px;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--paper-600);
+  background: rgba(241,241,238,0.6);
+  border-bottom: 1px solid rgba(232,232,228,0.9);
+  white-space: nowrap;
+}
+tbody td {
+  padding: 20px;
+  border-bottom: 1px solid rgba(241,241,238,0.7);
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+/* Each row is a clickable college row */
+tbody tr {
+  cursor: pointer;
+  transition: background .18s;
+  position: relative;
+}
+tbody tr:hover { background: rgba(241,241,238,0.55); }
+
+/* JS adds .active to the row whose slide is currently open */
+tbody tr.active { background: rgba(11,11,15,0.045); }
+tbody tr.active td:first-child { box-shadow: inset 3px 0 0 var(--ink-900); }  /* black bar on left */
+tbody tr:last-child td { border-bottom: none; }
+
+/* Small monospace number styles for rank / cutoff / percentile */
+.rank-num { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; font-size: 13px; color: var(--paper-600); }
+.cutoff-num { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; font-size: 15px; font-weight: 600; color: var(--ink-900); }
+.pct-num { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; font-size: 15px; font-weight: 600; color: var(--ink-900); }
+
+/* College name + meta line ("VJTI · Mumbai · MCA") */
+.college-name { font-weight: 600; color: var(--ink-900); font-size: 14px; display: block; margin-bottom: 3px; }
+.college-meta { font-size: 12.5px; color: var(--paper-600); }
+
+/* Status indicators: colored dot + label */
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.status-safe { background: var(--ink-900); }      /* dark = safe */
+.status-border { background: var(--paper-600); }  /* mid grey = borderline */
+.status-reach { background: var(--paper-400); }   /* light grey = reach */
+.status-label { font-size: 12.5px; color: var(--paper-700); font-weight: 500; margin-left: 8px; }
+
+/* The little arrow "→" at the right of each row */
+.row-arrow { color: var(--paper-500); font-size: 16px; transition: transform .2s, color .2s; display: inline-block; }
+tbody tr:hover .row-arrow { transform: translateX(4px); color: var(--ink-900); }
+
+/* Shown when filters return zero colleges */
+.empty-state { padding: 80px 24px; text-align: center; }
+.empty-state h4 { font-family: Georgia, 'Times New Roman', serif; font-size: 22px; font-weight: 600; color: var(--ink-900); margin-bottom: 8px; }
+.empty-state p { font-size: 14px; color: var(--paper-600); }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  SECTION 8: FULL-SCREEN SLIDE (opens when you click a college)
+   ───────────────────────────────────────────────────────────────────
+   Two elements work together:
+     1. .drawer-overlay → the dark blurry backdrop
+     2. .drawer        → the white full-screen panel that slides up
+   Add class .open (via JS) to show them.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.drawer-overlay {
+  position: fixed; inset: 0; z-index: 1500;
+  background: rgba(11,11,15,0.5);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;                    /* hidden by default */
+  pointer-events: none;
+  transition: opacity var(--drawer-speed) ease;
+}
+.drawer-overlay.open { opacity: 1; pointer-events: auto; }
+
+.drawer {
+  position: fixed; inset: 0;     /* covers the whole viewport */
+  z-index: 1600;
+  width: 100vw; height: 100vh; height: 100dvh;  /* dvh handles mobile browser bars */
+  background: var(--paper-50);
+  transform: translateY(100%);   /* starts pushed down off-screen */
+  transition: transform var(--drawer-speed) cubic-bezier(0.16, 1, 0.3, 1);
+  display: block;
+  overflow-y: auto;              /* the entire detail slide moves, including its header */
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  will-change: transform;        /* hints the browser to optimise */
+}
+.drawer.open { transform: translateY(0); }   /* slides up into view */
+
+/* Centered column inside the full-screen slide so text isn't edge-to-edge */
+.drawer-inner {
+  width: 100%;
+  max-width: var(--drawer-max);
+  margin: 0 auto;
+  min-height: 100%;
+}
+
+/* The whole slide scrolls now, so the college name/header moves away with the content. */
+.drawer-head {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.drawer-body {
+  overflow: visible;
+  min-height: 0;
+}
+
+/* ─── Slide header: badge + title on left, close button on right ─── */
+.drawer-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 20px;
+  padding: 32px 40px 24px;
+  border-bottom: 1px solid var(--paper-200);
+  flex-shrink: 0;                /* never shrinks, stays at top */
+}
+.drawer-badge {
+  display: inline-grid; place-items: center;
+  min-width: 52px; height: 52px; padding: 0 12px;
+  background: var(--ink-900); color: var(--paper-50);
+  border-radius: 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 14px; font-weight: 600; letter-spacing: -0.02em;
+  flex-shrink: 0;
+}
+.drawer-headtext { flex: 1; min-width: 0; }
+.drawer-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--paper-600); margin-bottom: 8px; }
+.drawer-title { font-family: Georgia, 'Times New Roman', serif; font-size: clamp(24px, 3vw, 38px); font-weight: 600; line-height: 1.12; letter-spacing: -0.025em; color: var(--ink-900); }
+
+/* The X close button */
+.drawer-close {
+  width: 44px; height: 44px; flex-shrink: 0;
+  display: grid; place-items: center;
+  background: var(--paper-100); border: 1px solid var(--paper-300);
+  border-radius: 12px; cursor: pointer; color: var(--paper-700);
+  transition: all .2s;
+}
+.drawer-close:hover { background: var(--ink-900); color: var(--paper-50); border-color: var(--ink-900); transform: rotate(90deg); }
+
+/* Content area of the slide. Scrolling is handled by .drawer so the header moves too. */
+.drawer-body {
+  padding: 40px 40px 60px;
+}
+/* Custom scrollbar (Chrome/Safari/Edge) */
+.drawer-body::-webkit-scrollbar { width: 10px; }
+.drawer-body::-webkit-scrollbar-track { background: transparent; }
+.drawer-body::-webkit-scrollbar-thumb { background: var(--paper-300); border-radius: 100px; border: 2px solid var(--paper-50); }
+.drawer-body::-webkit-scrollbar-thumb:hover { background: var(--paper-400); }
+
+/* ─── Website CTA on the college detail slide ─── */
+.d-cta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 28px;
+  padding-top: 4px;
+}
+.d-cta {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 20px;
+  border: 1px solid var(--ink-900);
+  border-radius: 10px;
+  background: var(--ink-900);
+  color: var(--paper-50);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform .2s ease, background .2s ease, color .2s ease;
+}
+.d-cta:hover {
+  transform: translateY(-1px);
+  background: transparent;
+  color: var(--ink-900);
+}
+
+/* ─── Stat grid inside the slide (Rank / Percentile / Seats / Fees / …) ─── */
+.d-stat-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--paper-200);   /* the gaps become divider lines */
+  border: 1px solid var(--paper-200);
+  border-radius: 16px; overflow: hidden;
+  margin-bottom: 36px;
+}
+.d-stat { background: var(--paper-50); padding: 22px 24px; }
+.d-stat-label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--paper-600); margin-bottom: 8px; }
+.d-stat-value { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; font-size: 22px; font-weight: 600; color: var(--ink-900); letter-spacing: -0.02em; }
+.d-stat-value small { font-size: 13px; font-weight: 500; color: var(--paper-600); margin-left: 3px; }
+
+/* ─── Generic slide sections: title + content ─── */
+.d-section { margin-bottom: 34px; }
+.d-section-title {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--paper-600);
+  margin-bottom: 14px;
+  display: flex; align-items: center; gap: 12px;
+}
+.d-section-title::after { content: ''; flex: 1; height: 1px; background: var(--paper-200); }  /* line after title */
+.d-text { font-size: 15px; line-height: 1.75; color: var(--paper-700); max-width: 76ch; }
+
+/* Chips (pills) for highlights like "NBA Accredited" */
+.d-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.d-chip { padding: 8px 15px; background: var(--paper-100); border: 1px solid var(--paper-300); border-radius: 100px; font-size: 13px; font-weight: 500; color: var(--paper-700); }
+
+/* ─── Placement bars (rate / avg CTC / highest CTC) ─── */
+.d-bars { display: flex; flex-direction: column; gap: 16px; max-width: 640px; }
+.d-bar-row { display: grid; grid-template-columns: 130px 1fr 100px; align-items: center; gap: 18px; font-size: 13px; }
+.d-bar-track { height: 10px; background: var(--paper-200); border-radius: 100px; overflow: hidden; }
+.d-bar-fill { height: 100%; background: var(--ink-900); border-radius: 100px; width: 0; transition: width .9s cubic-bezier(0.16,1,0.3,1); }
+.d-bar-row .val { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; font-weight: 600; color: var(--ink-900); text-align: right; }
+.d-bar-row .lbl { color: var(--paper-600); font-weight: 500; }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  SECTION 9: CUTOFF RANGE CHART
+   ───────────────────────────────────────────────────────────────────
+   One positive bar per year. Bars use the year's HIGHEST cutoff
+   percentile as their height. The label above each bar shows BOTH
+   percentiles from that same year, e.g. 95-75 (highest-lowest).
+   The chart starts at 0 and never uses a negative axis.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.d-gap-chart { margin-top: 4px; }
+.d-gap-plot {
+  position: relative;
+  height: 238px;
+  box-sizing: border-box;
+  padding: 32px 0 0 34px;
+}
+.d-gap-grid {
+  position: absolute;
+  left: 34px; right: 0; top: 32px; bottom: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(25% - 1px),
+    var(--paper-200) calc(25% - 1px),
+    var(--paper-200) 25%
+  );
+  border-bottom: 1px solid var(--paper-400);
+}
+.d-gap-yaxis {
+  position: absolute;
+  left: 0; top: 32px; bottom: 0;
+  width: 28px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 10px; color: var(--paper-500);
+  text-align: right;
+}
+.d-gap-cols {
+  position: relative;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px; height: 100%; z-index: 1;
+}
+.d-gap-col {
+  position: relative;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  height: 100%; min-width: 0;
+}
+.d-gap-bar-wrap {
+  height: 100%; display: flex; align-items: flex-end; justify-content: center;
+  position: relative;
+}
+.d-gap-bar {
+  width: 100%; max-width: 56px;
+  height: 0;
+  transition: height 1.1s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  background: var(--ink-900);
+  border-radius: 6px 6px 2px 2px;
+  min-height: 3px;
+}
+.d-gap-bar .d-gap-val {
+  position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%);
+  margin-bottom: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 11px; font-weight: 700; white-space: nowrap;
+  color: var(--ink-900);
+}
+.d-gap-years {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px; margin-top: 2px; padding-left: 34px;
+  font-size: 12px; color: var(--paper-600); font-weight: 600;
+  text-align: center;
+}
+
+/* Highest/lowest overall summary shown above the chart. */
+.d-gap-summary { display: flex; gap: 24px; margin: 10px 0 16px; flex-wrap: wrap; font-size: 13px; color: var(--paper-700); font-weight: 500; }
+.d-gap-summary strong { color: var(--ink-900); font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  SECTION 10: FOOTER
+   ═══════════════════════════════════════════════════════════════════ */
+
+footer { background: var(--ink-900); color: var(--paper-50); padding: 100px 48px 48px; position: relative; z-index: 10; }
+.footer-inner { max-width: 1240px; margin: 0 auto; }
+.footer-title { font-family: Georgia, 'Times New Roman', serif; font-size: clamp(32px, 6vw, 80px); font-weight: 600; line-height: 1.05; letter-spacing: -0.035em; margin-bottom: 60px; max-width: 900px; }
+.footer-title em { font-style: italic; font-weight: 400; color: rgba(255,255,255,0.5); }
+.footer-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; padding-top: 48px; border-top: 1px solid rgba(255,255,255,0.1); }
+.footer-col h5 { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.88); margin-bottom: 14px; }
+.footer-col p { font-size: 14px; color: rgba(255,255,255,0.92); line-height: 1.7; }
+.footer-inner > p a, .footer-inner > p a:link, .footer-inner > p a:visited, .footer-inner > p a:hover, .footer-inner > p a:active { color: var(--paper-50); }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  SECTION 11: SCROLL REVEAL ANIMATION
+   ───────────────────────────────────────────────────────────────────
+   Elements start invisible (opacity:0, pushed down). JS adds .in-view
+   when they scroll into the viewport → they fade and slide into place.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal.in-view { opacity: 1; transform: translateY(0); }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  SECTION 11B: CUTOFF TRENDS WIDGET (Step 02 — results section)
+   ───────────────────────────────────────────────────────────────────
+   The "pick a course/category/quota, see the trend" chart described in
+   docs/cutoff-trends-graph-spec.md. Sits below the eligible-colleges
+   table, reuses the same card/field/chip visual language as the rest
+   of the page instead of introducing a new style.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.trends-widget {
+  margin-top: 32px;
+  background: rgba(253,253,253,0.75);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border: 1px solid rgba(232,232,228,0.9);
+  border-radius: var(--radius-card);
+  padding: 40px;
+  box-shadow: 0 24px 60px rgba(11,11,15,0.06);
+}
+
+.trends-head { margin-bottom: 28px; }
+.trends-eyebrow {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--paper-600); margin-bottom: 10px;
+  display: flex; align-items: center; gap: 10px;
+}
+.trends-eyebrow::before { content: ''; width: 28px; height: 1px; background: var(--paper-500); }
+.trends-title { font-family: Georgia, 'Times New Roman', serif; font-size: 30px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 8px; }
+.trends-title em { font-style: italic; font-weight: 400; color: var(--paper-600); }
+.trends-desc { font-size: 14px; color: var(--paper-700); max-width: 640px; line-height: 1.6; }
+
+/* ── Filters: reuses .field/.field-label/select styling from the search card ── */
+.trends-filters {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 18px; align-items: end; margin-bottom: 20px;
+}
+.trends-filters .field select:disabled { cursor: not-allowed; opacity: 0.55; }
+
+/* ── Drawer's own mini cutoff-explorer (Category/Quota, per college) ──
+   Same .field/.field-label/select styling, just a looser grid since it
+   only ever shows 2-4 fields instead of the page widget's 5. ── */
+.d-trend-filters {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px; align-items: end; margin-bottom: 18px;
+}
+.d-trend-filters .field select:disabled { cursor: not-allowed; opacity: 0.55; }
+.d-trend-body { min-height: 180px; }
+@media (max-width: 640px) {
+  .d-trend-filters { grid-template-columns: 1fr 1fr; }
+  .d-trend-body { min-height: 160px; }
+}
+
+.trends-ladies-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 24px; padding-top: 4px;
+}
+.trends-ladies-row label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13.5px; font-weight: 500; color: var(--paper-700); cursor: pointer;
+}
+.trends-ladies-row input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--ink-900); cursor: pointer; }
+
+/* ── Year chips (formerly round-toggle chips) ── */
+.trends-rounds-wrap { margin: 22px 0 24px; }
+.trends-rounds-label { display: block; margin-bottom: 10px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--paper-700); font-weight: 700; }
+.trends-rounds { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 0; }
+.trends-rounds:empty { display: none; }
+.round-chip {
+  min-width: 88px; padding: 11px 16px; border-radius: 14px;
+  border: 1px solid var(--paper-300);
+  background: var(--paper-50); color: var(--ink-900);
+  font-size: 13px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  cursor: pointer; transition: transform .18s, background .18s, border-color .18s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.round-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--paper-300); }
+.round-chip.active { background: var(--paper-200); color: var(--ink-900); border-color: var(--ink-900); box-shadow: 0 3px 0 var(--ink-900); }
+.round-chip:hover { border-color: var(--paper-500); transform: translateY(-1px); }
+
+/* Seat Matrix toggle button */
+.seat-matrix-toggle { margin-left: auto; }
+.seat-matrix-toggle.active { background: var(--paper-200); color: var(--ink-900); border-color: var(--ink-900); box-shadow: 0 3px 0 var(--ink-900); }
+
+/* ── PDF-style tables (per-year cutoff table + Seat Matrix) ── */
+.pdf-table-title { font-size: 13px; font-weight: 700; color: var(--ink-900); margin: 18px 0 10px; padding-left: 12px; border-left: 3px solid var(--paper-300); }
+.pdf-table-title:first-child { margin-top: 0; }
+.pdf-table-scroll {
+  width: 100%; overflow-x: auto; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--paper-300);
+  border-radius: 14px; background: var(--paper-50); margin: 0 0 18px;
+}
+.pdf-table {
+  width: 100%; min-width: 520px; border-collapse: collapse; border-spacing: 0;
+  font-size: 13px; margin: 0; background: var(--paper-50);
+}
+.pdf-table th, .pdf-table td { border: 1px solid var(--paper-300); padding: 11px 12px; text-align: center; vertical-align: middle; }
+.pdf-table th { background: var(--paper-200); font-weight: 800; color: var(--ink-900); }
+.pdf-table tbody tr:nth-child(even) td { background: #FAF8F2; }
+.pdf-table td.pdf-cat { text-align: left; font-weight: 600; }
+.pdf-table .pdf-selected {
+  background: transparent !important;
+  box-shadow: inset 0 0 0 2px var(--paper-500);
+  font-weight: 800;
+}
+.pdf-table th.pdf-selected {
+  background: transparent !important;
+  color: var(--ink-900);
+  box-shadow: inset 0 0 0 2px var(--paper-500);
+}
+.pdf-selected-title { padding-left: 12px; border-left: 3px solid var(--paper-500); }
+.pdf-table .pdf-cell-line + .pdf-cell-line { margin-top: 3px; }
+.pdf-view-note { font-size: 12px; color: var(--paper-600); margin: 0 0 14px; line-height: 1.5; }
+.engineering-branch-selector { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 22px 0 8px; padding: 12px; border: 1px solid #d1d5db; border-radius: 12px; background: #f5f5f5; }
+.engineering-branch-current { display: flex; min-width: 0; flex: 1; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.engineering-branch-current span { color: #6b7280; font-size: 11px; }
+.engineering-branch-current strong { color: #111827; font-size: 14px; line-height: 1.35; }
+.engineering-branch-arrow { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 1px solid #9ca3af; border-radius: 9px; background: #fff; color: #111827; font-size: 22px; cursor: pointer; }
+.engineering-branch-arrow:disabled { opacity: .35; cursor: not-allowed; }
+.pdf-round-title { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--paper-600); margin: 20px 0 8px; }
+#dTrendTable, #dSeatMatrixBody { overflow-x: auto; }
+
+/* ── Chart body ── */
+.trends-body {
+  position: relative;
+  min-height: 180px;
+  background: rgba(248,248,246,0.6);
+  border: 1px solid rgba(241,241,238,0.9);
+  border-radius: 16px;
+  padding: 20px;
+}
+.trends-empty, .trends-loading {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center; padding: 40px;
+  color: var(--paper-600); font-size: 14px; line-height: 1.6;
+}
+.trends-empty strong { display: block; color: var(--ink-900); font-family: Georgia, 'Times New Roman', serif; font-size: 19px; font-weight: 600; margin-bottom: 8px; }
+
+/* ── Insight badges under the chart ── */
+.trends-insights {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 14px; margin-top: 24px;
+}
+.tin-card {
+  background: rgba(248,248,246,0.7);
+  border: 1px solid rgba(241,241,238,0.9);
+  border-radius: 14px; padding: 18px 20px;
+}
+.tin-label { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--paper-600); margin-bottom: 8px; }
+.tin-value { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; font-size: 17px; font-weight: 600; color: var(--ink-900); }
+.tin-value.up { color: #2E7D4F; }
+.tin-value.down { color: #B23A3A; }
+
+.trends-note { margin-top: 18px; font-size: 12.5px; color: var(--paper-500); line-height: 1.6; }
+.trends-note.warn { color: #9C6B12; }
+
+
+
+/* ── Official-PDF-style seat matrix ── */
+.seat-pdf-card { border: 1px solid var(--paper-300); background: var(--paper-50); margin: 18px 0 28px; overflow: hidden; border-radius: 16px; }
+.seat-pdf-head { background: var(--paper-50); }
+.seat-pdf-institution { padding: 12px 14px 7px; font-size: 15px; font-weight: 800; color: var(--ink-900); }
+.seat-pdf-course-name { padding: 0 14px 5px; color: var(--ink-900); font-size: 13px; font-weight: 700; }
+.seat-pdf-subline { padding: 0 14px 12px; color: var(--paper-600); font-size: 12px; font-weight: 600; }
+.seat-pdf-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)); border-top: 1px solid var(--paper-300); border-bottom: 1px solid var(--paper-300); }
+.seat-pdf-summary-item { min-width: 0; padding: 9px 8px; border-right: 1px solid var(--paper-300); display: flex; flex-direction: column; gap: 5px; text-align: center; }
+.seat-pdf-summary-item span, .seat-pdf-detail span { font-size: 10px; color: var(--paper-600); }
+.seat-pdf-summary-item strong, .seat-pdf-detail strong { font-size: 12px; color: var(--ink-900); overflow-wrap: anywhere; }
+.seat-pdf-course-summary-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.seat-pdf-course-summary { width: 100%; min-width: 820px; border-collapse: collapse; border-spacing: 0; font-size: 11px; background: var(--paper-50); }
+.seat-pdf-course-summary th, .seat-pdf-course-summary td { border: 1px solid var(--paper-300); padding: 8px 7px; text-align: center; vertical-align: middle; }
+.seat-pdf-course-summary thead th { background: var(--paper-200); color: var(--ink-900); font-weight: 800; }
+.seat-pdf-course-summary tbody td { color: var(--ink-900); font-weight: 600; }
+.seat-pdf-course-summary th:nth-child(2), .seat-pdf-course-summary td:nth-child(2) { min-width: 220px; text-align: left; }
+.seat-pdf-details { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--paper-300); background: var(--paper-100); }
+.seat-pdf-detail { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-right: 1px solid var(--paper-300); }
+.seat-pdf-status, .seat-pdf-cap { padding: 9px 12px; font-size: 12px; font-weight: 800; background: var(--paper-100); border-bottom: 1px solid var(--paper-300); }
+.seat-pdf-cap { background: var(--paper-50); text-align: center; font-size: 13px; }
+.seat-pdf-summary-grid { display: grid; grid-template-columns: repeat(8, minmax(86px, 1fr)); border-bottom: 1px solid var(--paper-300); }
+.seat-pdf-summary-grid > div { min-height: 54px; padding: 7px 8px; border-right: 1px solid var(--paper-300); display: flex; flex-direction: column; justify-content: center; gap: 4px; text-align: center; }
+.seat-pdf-summary-grid span { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: var(--paper-600); }
+.seat-pdf-summary-grid b { font-size: 12px; color: var(--ink-900); }
+.seat-pdf-data-note, .seat-pdf-footer-note { padding: 8px 12px; font-size: 10.5px; line-height: 1.45; color: var(--paper-600); background: var(--paper-100); border-bottom: 1px solid var(--paper-300); }
+.seat-pdf-lane-title { padding: 8px 10px; background: var(--paper-200); border-bottom: 1px solid var(--paper-300); font-size: 12px; font-weight: 800; color: var(--ink-900); }
+.seat-pdf-table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; background: var(--paper-50); }
+.seat-pdf-table { width: 100%; min-width: 860px; border-collapse: collapse; border-spacing: 0; table-layout: fixed; font-size: 11px; margin: 0; background: var(--paper-50); }
+.seat-pdf-table th, .seat-pdf-table td { border: 1px solid var(--paper-300); padding: 7px 4px; text-align: center; vertical-align: middle; }
+.seat-pdf-table thead th { background: var(--paper-200); font-weight: 800; color: var(--ink-900); }
+.seat-pdf-table .seat-pdf-rowlabel { width: 112px; }
+.seat-pdf-table tbody td { background: var(--paper-50); color: var(--ink-900); }
+.seat-pdf-table tbody .seat-pdf-rowlabel { font-weight: 800; background: var(--paper-100); text-align: left; padding-left: 8px; }
+.seat-pdf-common-row td { font-weight: 800; background: var(--paper-50); text-align: center; }
+.seat-pdf-common { padding: 8px 12px; border: 1px solid var(--paper-300); border-top: 0; text-align: center; font-size: 11px; font-weight: 800; background: var(--paper-50); }
+.seat-pdf-card > .seat-pdf-footer-note { border-bottom: 0; }
+@media (max-width: 900px) { .seat-pdf-summary-grid { grid-template-columns: repeat(4, minmax(110px, 1fr)); overflow-x:auto; } }
+@media (max-width: 600px) { .seat-pdf-summary-grid { grid-template-columns: repeat(2, minmax(130px, 1fr)); } .seat-pdf-table { min-width: 760px; font-size: 10.5px; } }
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  SECTION 12: RESPONSIVE MEDIA QUERIES
+   ───────────────────────────────────────────────────────────────────
+   These rules override the styles above when the screen is narrow.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Tablet / small laptop ─── */
+@media (max-width: 900px) {
+  .topbar { padding: 0 20px; height: 60px; }
+  .topbar-nav { display: none; }        /* hide the nav links on mobile */
+  .hero { padding: 110px 20px 60px; min-height: auto; }
+  /* Keep the four hero statistics in one row on desktop. */
+  .hero-stat { padding: 18px; }
+  .hero-actions { flex-direction: column; width: 100%; }
+  .btn-primary, .btn-ghost { width: 100%; justify-content: center; }
+  .section { padding: 70px 20px; }
+  .section-head { margin-bottom: 40px; }
+  .search-card { padding: 32px 20px; border-radius: 20px; }
+  .percentile-row { grid-template-columns: 1fr; gap: 28px; padding-bottom: 28px; }  /* stack vertically */
+  .percentile-block { border-right: none; border-bottom: 1px solid rgba(241,241,238,0.9); padding-right: 0; padding-bottom: 28px; }
+  .fields-grid { grid-template-columns: 1fr; gap: 20px; }  /* dropdowns stack */
+  .results-bar { padding: 18px 20px; }
+  .chip-group { width: 100%; }
+  .chip { flex: 1; padding: 8px 10px; font-size: 12px; }
+  footer { padding: 60px 20px 32px; }
+  .footer-grid { grid-template-columns: 1fr; gap: 32px; padding-top: 32px; }
+
+  /* Background scales down */
+  .tortoise-main { width: 55vw; max-width: 280px; opacity: 0.30; }
+  .tortoise-tr { width: 28vw; max-width: 140px; top: 6%; right: 4%; }
+  .tortoise-bl { width: 30vw; max-width: 150px; bottom: 6%; left: 4%; }
+  .bird { transform: scale(0.75); }
+
+  /* Slide adjustments */
+  .drawer-head { padding: 22px 20px 18px; gap: 14px; }
+  .drawer-body { padding: 28px 20px 48px; }
+  .drawer-badge { min-width: 44px; height: 44px; font-size: 12px; border-radius: 12px; }
+  .d-stat-grid { grid-template-columns: repeat(2, 1fr); border-radius: 12px; }
+  .d-stat { padding: 16px 18px; }
+  .d-stat-value { font-size: 18px; }
+  .d-bar-row { grid-template-columns: 100px 1fr 80px; gap: 12px; font-size: 12px; }
+  .d-cta-row { flex-direction: column; }
+
+  /* Gap chart smaller */
+  .d-gap-plot { height: 180px; }
+  .d-gap-zero::before { left: -18px; }
+  .d-gap-bar { max-width: 44px; }
+
+  /* Cutoff trends widget: 5-column filter grid -> stacked */
+  .trends-widget { padding: 28px 20px; border-radius: 20px; }
+  .trends-filters { grid-template-columns: 1fr; gap: 14px; }
+  .trends-insights { grid-template-columns: repeat(2, 1fr); }
+  .trends-body { min-height: 160px; padding: 14px; }
+}
+
+/* ─── Small phones ─── */
+@media (max-width: 500px) {
+  .topbar-brand span { display: none; }        /* hide brand text, keep logo mark */
+  .hero h1 { font-size: 36px; }
+  .section-title { font-size: 26px; }
+  .tortoise-main { width: 65vw; }
+  .tortoise-tr { width: 32vw; }
+  .tortoise-bl { width: 36vw; }
+  .percentile-value input { max-width: 100%; }
+  .d-stat-grid { grid-template-columns: 1fr 1fr; }
+  .d-bar-row { grid-template-columns: 84px 1fr 72px; font-size: 11.5px; }
+  .d-gap-bar .d-gap-val { font-size: 10.5px; }
+}
+
+/* ─── Accessibility: disable animations for users who prefer reduced motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+
+/* DESIGN VARIANT 01 — SWISS EDITORIAL / INFORMATION ARCHITECTURE */
+:root{--radius-card:10px;--radius-input:6px;}
+body{letter-spacing:-.01em;}
+.hero-inner,.section-inner{max-width:1180px;}
+.hero{padding-top:clamp(72px,9vw,130px);padding-bottom:clamp(50px,7vw,92px);}
+.hero-eyebrow,.section-eyebrow{font-family:'Inter',sans-serif;font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:.72rem;}
+.hero-inner{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(250px,.7fr);gap:40px;align-items:end;}
+.hero h1,.section-title{font-family:'Inter',-apple-system,sans-serif;font-weight:600;letter-spacing:-.065em;line-height:.92;}
+.hero h1{font-size:clamp(4rem,10vw,8.8rem);max-width:850px;}
+.hero-lede{max-width:650px;font-size:clamp(1rem,1.8vw,1.25rem);line-height:1.45;}
+.hero-actions{margin-top:32px;}
+.btn-primary,.search-submit{border-radius:6px;box-shadow:none;text-transform:uppercase;letter-spacing:.08em;font-size:.75rem;font-weight:700;}
+.hero-stats{grid-column:1/-1;width:100%;min-width:0;margin-top:68px;border-radius:16px;border:1px solid var(--paper-400);box-shadow:none;}
+.hero-stat{min-height:130px;}
+.hero-stat-num{font-family:'Inter',sans-serif;font-weight:600;letter-spacing:-.06em;}
+.hero-stat-label{letter-spacing:.14em;font-size:.66rem;}
+.section{padding:clamp(60px,8vw,110px) 0;}
+.section-head{display:grid;grid-template-columns:1.2fr .8fr;gap:50px;align-items:end;border-top:1px solid var(--paper-400);padding-top:22px;}
+.section-title{font-size:clamp(2.5rem,6vw,5.8rem);}
+.section-desc{max-width:430px;font-size:.98rem;}
+.search-card{border-radius:8px;border:1px solid var(--paper-400);box-shadow:none;padding:clamp(28px,4vw,52px);}
+.field input,.field select,.ssel-btn{border-radius:5px;border-color:var(--paper-400);}
+.search-submit{border-radius:5px;box-shadow:none;}
+/* result list: magazine-like rows */
+.results-table{border-top:1px solid var(--paper-400);}
+.results-table tr{border-bottom:1px solid var(--paper-300);transition:background .2s ease,transform .2s ease;}
+.results-table tr:hover{background:rgba(11,11,15,.035);transform:translateX(4px);}
+.drawer{border-radius:0;}
+.drawer-head{border-bottom:1px solid var(--paper-300);}
+.d-section,.trend-card,.seat-card{border-radius:8px;box-shadow:none;border:1px solid var(--paper-300);}
+@media(max-width:760px){.hero-stats{grid-template-columns:repeat(2,1fr)}.hero-inner,.section-head{display:block}.hero h1{font-size:clamp(3.5rem,15vw,6rem)}.section-head{padding-top:16px}.section-desc{margin-top:18px}.hero-stats{margin-top:42px}.hero-stat{min-height:105px}}
+
+.feedback-launch{position:fixed;right:24px;bottom:24px;z-index:1200;display:inline-flex;align-items:center;gap:10px;margin:0;padding:13px 18px;border:1px solid rgba(255,255,255,.28);background:var(--ink-900);color:var(--paper-50);border-radius:8px;font:700 .72rem Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:.2s ease;box-shadow:0 10px 30px rgba(0,0,0,.22)}.feedback-launch:hover{background:var(--paper-50);color:var(--ink-900)}@media (max-width:640px){.feedback-launch{right:16px;bottom:16px;padding:12px 15px;font-size:.68rem}}
+.feedback-modal{position:fixed;inset:0;z-index:3000;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(11,11,15,.58);backdrop-filter:blur(5px)}.feedback-modal.open{display:flex}.feedback-card{width:min(560px,100%);background:var(--paper-50);border:1px solid var(--paper-300);border-radius:12px;padding:28px;box-shadow:0 24px 70px rgba(0,0,0,.2)}.feedback-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}.feedback-card h2{font-family:Fraunces,serif;font-size:32px;margin:0 0 6px}.feedback-card p{margin:0;color:var(--paper-600);line-height:1.5}.feedback-close{border:1px solid var(--paper-300);background:transparent;width:40px;height:40px;border-radius:8px;cursor:pointer;font-size:20px}.feedback-label{display:block;margin:22px 0 8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.feedback-rating{display:flex;gap:10px;align-items:center}.feedback-rating button{width:46px;height:46px;border:1px solid var(--paper-300);background:transparent;border-radius:8px;cursor:pointer;font-size:25px;line-height:1;color:var(--paper-400);transition:.15s ease}.feedback-rating button:hover{color:var(--ink-900);border-color:var(--ink-900);transform:translateY(-1px)}.feedback-rating button.selected{background:var(--ink-900);color:var(--paper-50);border-color:var(--ink-900)}.feedback-message{width:100%;min-height:130px;resize:vertical;border:1px solid var(--paper-300);border-radius:8px;padding:12px;font:inherit;background:white} .feedback-actions{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:18px}.feedback-actions .feedback-close{width:auto;min-width:88px;height:44px;padding:0 18px;font-size:14px}.feedback-submit{border:0;background:var(--ink-900);color:var(--paper-50);padding:0 20px;min-width:128px;height:44px;border-radius:7px;font-weight:700;cursor:pointer;white-space:nowrap}.feedback-submit:disabled{opacity:.55;cursor:wait}.feedback-status{min-height:20px;margin-top:12px;font-size:13px}.feedback-hp{position:absolute;left:-9999px;opacity:0}
+
+/* White-led Slide 2: off-white surfaces first, beige only for structure and selection. */
+.results-bar,.table-wrap,.drawer,.drawer-head,.drawer-body,.d-section,.trend-card,.seat-card,.pdf-table-scroll{background:#FFFBF4!important}
+.results-table thead th,.pdf-table thead th{background:#FFFBF4;color:#11120D;border-bottom:1px solid #D8CFBC}
+.results-table tr,.pdf-table tr,.drawer-head,.d-section,.trend-card,.seat-card{border-color:#D8CFBC}
+.results-table tr:hover{background:rgba(216,207,188,.18)!important}
+.results-table tr.active,.pdf-table td.pdf-selected,.pdf-table th.pdf-selected,.pdf-selected-title{background:rgba(216,207,188,.42)!important;color:#11120D}
+.chip{background:#FFFBF4;border-color:#D8CFBC;color:#11120D}
+.chip.active{background:#11120D;color:#FFFBF4;border-color:#11120D}
+
+
+/* Match the admin panel: strict white, grey, and charcoal palette. */
+:root {
+  --ink-900:#262626; --ink-800:#333333;
+  --paper-50:#FFFFFF; --paper-100:#FFFFFF; --paper-200:#E9E9E9;
+  --paper-300:#DEDEDE; --paper-400:#D6D6D6; --paper-500:#BDBDBD;
+  --paper-600:#666666; --paper-700:#444444; --paper-800:#262626;
+}
+html, body, .sketch-bg { background:#F4F4F4; color:#262626; }
+.page-content { background:transparent!important; color:#262626; }
+.sketch-bg::after { background-image:linear-gradient(rgba(0,0,0,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.025) 1px,transparent 1px); }
+.topbar, .hero-stat, .seo-directory-card, .search-card, .results-bar, .table-wrap,
+.results-table, .drawer, .drawer-head, .drawer-body, .d-section, .d-stat, .trend-card,
+.seat-card, .seat-pdf-card, .seat-pdf-head, .seat-pdf-table-wrap, .seat-pdf-table,
+.feedback-card, .feedback-message, .pdf-table-scroll { background:#FFFFFF!important; color:#262626; }
+.topbar, .hero-stats, .seo-directory-card, .search-card, .results-table,
+.results-table tr, .drawer-head, .d-section, .trend-card, .seat-card,
+.seat-pdf-card, .seat-pdf-data-note, .seat-pdf-footer-note, .feedback-card,
+.feedback-message, .field input, .field select, .ssel-btn, .ssel-search input,
+.feedback-close, .chip, .d-chip, .round-chip, .seat-matrix-toggle, .pdf-table,
+.seat-pdf-table, .results-table td, .results-table th { border-color:#DEDEDE!important; }
+.topbar-nav, .topbar-nav a, .hero-lede, .section-desc, .seo-directory-copy p,
+.field label, .ssel-btn, .results-count span, .college-meta, .status-label,
+.drawer-eyebrow, .d-text, .d-stat-label, .d-stat-value small, .d-bar-row .lbl,
+.d-gap-summary, .trends-desc, .trends-rounds-label, .pdf-view-note,
+.pdf-round-title, .trends-note, .seat-pdf-subline, .seat-pdf-summary-grid span,
+.seat-pdf-data-note, .seat-pdf-footer-note, .feedback-card p { color:#666666!important; }
+.hero h1, .section-title, .section-title em, .hero h1 em, .topbar-brand,
+.seo-directory-copy h2, .results-count strong, .rank-num, .cutoff-num, .pct-num,
+.college-name, .empty-state h4, .drawer-title, .d-stat-value, .d-text strong,
+.d-bar-row .val, .d-gap-summary strong, .trends-title, .tin-value,
+.seat-pdf-institution, .seat-pdf-summary-grid b, .pdf-table-title,
+.feedback-card h2, .feedback-label, .footer-title, .footer-col h5,
+.footer-col p, .footer-inner, .footer-inner a { color:#262626!important; }
+.btn-primary, .search-submit, .seo-directory-link, .chip.active, .ssel-item.active,
+.feedback-launch, .feedback-submit, .feedback-rating button.selected {
+  background:#333333!important; color:#FFFFFF!important; border-color:#333333!important; box-shadow:none!important;
+}
+.btn-primary:hover, .search-submit:hover, .seo-directory-link:hover,
+.feedback-launch:hover, .feedback-submit:hover { background:#555555!important; color:#FFFFFF!important; }
+.btn-ghost, .knowledge-link, .feedback-close, .drawer-close, .feedback-rating button,
+.chip, .d-chip, .round-chip, .seat-matrix-toggle, .ssel-btn, .field input,
+.field select, .ssel-search input { background:#FFFFFF!important; color:#444444!important; }
+.results-table tr:hover, .results-table tr.active, .pdf-table td.pdf-selected,
+.pdf-table th.pdf-selected, .pdf-selected-title, .ssel-item:hover,
+.round-chip.active, .seat-matrix-toggle.active, .chip:hover { background:#E9E9E9!important; color:#262626!important; box-shadow:none!important; }
+.results-table tr.active .status, .status-safe, .status-border, .status-reach,
+.d-bar-fill, .bar, .round-chip .dot { background:#777777!important; }
+.pdf-table thead th, .results-table thead th, .seat-pdf-lane-title,
+.seat-pdf-table thead th, .seat-pdf-table tbody .seat-pdf-rowlabel,
+.seat-pdf-status, .seat-pdf-cap { background:#E9E9E9!important; color:#333333!important; }
+.pdf-table tbody tr:nth-child(even) td, .seat-pdf-table tbody td { background:#FFFFFF!important; color:#333333!important; }
+.tin-value.up, .tin-value.down, .trends-note.warn, .field input.field-invalid { color:#555555!important; border-color:#777777!important; }
+/* Preserve the original animated tortoises; make their line art visible on grey-white. */
+.tortoise-main, .tortoise-tr, .tortoise-bl { color:#777777!important; }
+.tortoise-main { opacity:.42; }
+.tortoise-tr { opacity:.38; }
+.tortoise-bl { opacity:.40; }
+/* The site uses the semantic <footer> element, not a .footer class. */
+footer { background:#111111!important; color:#FFFFFF!important; border-top:1px solid #333333!important; }
+footer .footer-title, footer .footer-title em, footer .footer-col h5, footer .footer-col p,
+footer .footer-inner, footer .footer-inner a { color:#FFFFFF!important; }
+footer .footer-grid { border-top-color:#444444!important; }
+.feedback-modal { background:rgba(0,0,0,.42)!important; }
+.feedback-message:focus, .field input:focus, .field select:focus, .ssel-btn:focus,
+.ssel-search input:focus { border-color:#888888!important; box-shadow:0 0 0 3px rgba(0,0,0,.06)!important; }
+
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     ██  HTML SECTION A: BACKGROUND ART
+     ───────────────────────────────────────────────────────────────────
+     All decorative SVGs. position:fixed via .sketch-bg, so they stay
+     still while the page scrolls. Each tortoise has a slightly
+     different animation (walking legs, blinking eye, wagging tail).
+     ═══════════════════════════════════════════════════════════════════ -->
+<div class="sketch-bg">
+
+  <!-- ─── Tortoise 1: the big centered one, with full animation ─── -->
+  <div class="tortoise-main">
+    <svg class="tortoise-svg" viewBox="0 0 400 260" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+
+      <!-- Tail — wiggles left/right via rotate animation -->
+      <g>
+        <animateTransform attributeName="transform" type="rotate"
+          values="0 80 178;-25 80 178;0 80 178;15 80 178;0 80 178"
+          dur="1.8s" repeatCount="indefinite"/>
+        <path d="M 80 178 Q 60 175 42 185"/>
+        <path d="M 80 178 Q 62 188 50 198" opacity="0.6"/>
+      </g>
+
+      <!-- Back leg — swings forward/back -->
+      <g>
+        <animateTransform attributeName="transform" type="rotate"
+          values="15 105 200;-15 105 200;15 105 200"
+          dur="1.4s" repeatCount="indefinite"/>
+        <path d="M 105 200 L 105 232"/>
+        <path d="M 90 232 L 120 232"/>
+      </g>
+
+      <!-- Front leg — opposite phase to back leg -->
+      <g>
+        <animateTransform attributeName="transform" type="rotate"
+          values="-15 255 200;15 255 200;-15 255 200"
+          dur="1.4s" repeatCount="indefinite"/>
+        <path d="M 255 200 L 255 232"/>
+        <path d="M 240 232 L 270 232"/>
+      </g>
+
+      <!-- Shell outline -->
+      <path d="M 80 180 Q 60 118 120 96 Q 180 76 240 96 Q 300 118 280 180 Q 260 222 180 222 Q 100 222 80 180 Z"/>
+
+      <!-- Shell pattern — pulses opacity in and out -->
+      <g>
+        <animate attributeName="opacity" values="0.5;1;0.5" dur="4s" repeatCount="indefinite"/>
+        <path d="M 145 132 L 172 120 L 200 132 L 200 162 L 172 172 L 145 162 Z"/>
+        <path d="M 200 132 L 228 120 L 256 132 L 256 162 L 228 172 L 200 162"/>
+        <path d="M 92 132 L 118 120 L 145 132 L 145 162 L 118 172 L 92 162 Z"/>
+        <path d="M 145 132 L 172 120 M 172 120 L 172 100 M 172 120 L 200 132 M 228 120 L 228 100"/>
+        <path d="M 145 162 L 145 182 M 172 172 L 172 192 M 200 162 L 200 182 M 228 172 L 228 192 M 118 172 L 118 192"/>
+      </g>
+
+      <!-- Neck -->
+      <path d="M 278 168 Q 288 158 296 162"/>
+
+      <!-- Head — bobs up/down and side to side -->
+      <g>
+        <animateTransform attributeName="transform" type="translate"
+          values="0 0; -3 -6; 0 0; 3 -3; 0 0"
+          dur="2.4s" repeatCount="indefinite"/>
+        <path d="M 294 162 Q 328 150 348 165 Q 358 176 348 188 Q 328 200 296 192"/>
+
+        <!-- Eye (white circle) -->
+        <circle cx="330" cy="170" r="5" fill="var(--paper-100)" stroke="currentColor" stroke-width="2.2"/>
+
+        <!-- Pupil — moves left and right (looks around) -->
+        <g>
+          <animateTransform attributeName="transform" type="translate"
+            values="0 0; 2 0; 0 0; -2 0; 0 0; 0 -1"
+            dur="7s" repeatCount="indefinite"/>
+          <circle cx="330" cy="170" r="2.2" fill="currentColor"/>
+        </g>
+
+        <!-- Eyelid — an ellipse that grows to blink -->
+        <ellipse cx="330" cy="170" rx="5" ry="0" fill="var(--paper-100)" stroke="currentColor" stroke-width="2.2">
+          <animate attributeName="ry" values="0;0;5;0;0;0;0;0;0;0;0;5;0;0" dur="5s" repeatCount="indefinite"/>
+        </ellipse>
+
+        <!-- Smile — morphs slightly like a breath -->
+        <path d="M 335 182 Q 342 188 348 182">
+          <animate attributeName="d"
+            values="M 335 182 Q 342 188 348 182; M 333 181 Q 342 191 350 181; M 335 182 Q 342 188 348 182"
+            dur="3.5s" repeatCount="indefinite"/>
+        </path>
+
+        <!-- Blush + freckle details -->
+        <circle cx="325" cy="184" r="3" fill="currentColor" opacity="0.08"/>
+        <circle cx="352" cy="174" r="0.8" fill="currentColor"/>
+      </g>
+
+      <!-- Ground line — dashes scroll sideways to imply walking -->
+      <path d="M 20 240 L 380 240" stroke-dasharray="6 8" opacity="0.4" stroke-width="1.3">
+        <animate attributeName="stroke-dashoffset" values="0;-28" dur="3s" repeatCount="indefinite"/>
+      </path>
+    </svg>
+  </div>
+
+  <!-- ─── Tortoise 2: top-right, simpler (no shell pattern pulses) ─── -->
+  <div class="tortoise-tr">
+    <svg class="tortoise-svg" viewBox="0 0 400 260" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <!-- Tail -->
+      <g>
+        <animateTransform attributeName="transform" type="rotate" values="0 80 178;-30 80 178;0 80 178" dur="2s" repeatCount="indefinite"/>
+        <path d="M 80 178 Q 60 175 44 188"/>
+      </g>
+      <!-- Back leg -->
+      <g>
+        <animateTransform attributeName="transform" type="rotate" values="12 105 200;-12 105 200;12 105 200" dur="1.6s" repeatCount="indefinite"/>
+        <path d="M 105 200 L 105 230"/><path d="M 92 230 L 118 230"/>
+      </g>
+      <!-- Front leg -->
+      <g>
+        <animateTransform attributeName="transform" type="rotate" values="-12 255 200;12 255 200;-12 255 200" dur="1.6s" repeatCount="indefinite"/>
+        <path d="M 255 200 L 255 230"/><path d="M 242 230 L 268 230"/>
+      </g>
+      <!-- Shell + pattern -->
+      <path d="M 80 180 Q 60 118 120 96 Q 180 76 240 96 Q 300 118 280 180 Q 260 222 180 222 Q 100 222 80 180 Z"/>
+      <path d="M 145 132 L 172 120 L 200 132 L 200 162 L 172 172 L 145 162 Z"/>
+      <path d="M 200 132 L 228 120 L 256 132 L 256 162 L 228 172 L 200 162"/>
+      <!-- Head (bob + blink + pupil movement) -->
+      <g>
+        <animateTransform attributeName="transform" type="translate" values="0 0; -4 -5; 0 0; 4 -2; 0 0" dur="2.8s" repeatCount="indefinite"/>
+        <path d="M 294 162 Q 328 150 348 165 Q 358 176 348 188 Q 328 200 296 192"/>
+        <circle cx="330" cy="170" r="5" fill="var(--paper-100)" stroke="currentColor" stroke-width="2.5"/>
+        <g><animateTransform attributeName="transform" type="translate" values="0 0; -2 0; 0 0; 2 0; 0 0" dur="6s" repeatCount="indefinite"/><circle cx="330" cy="170" r="2.2" fill="currentColor"/></g>
+        <ellipse cx="330" cy="170" rx="5" ry="0" fill="var(--paper-100)" stroke="currentColor" stroke-width="2.5"><animate attributeName="ry" values="0;0;5;0;0;0;0;0;0;0;0;5;0;0" dur="6s" repeatCount="indefinite"/></ellipse>
+        <path d="M 336 182 Q 342 187 348 182"/>
+      </g>
+      <path d="M 20 240 L 380 240" stroke-dasharray="6 8" opacity="0.4" stroke-width="1.3"/>
+    </svg>
+  </div>
+
+  <!-- ─── Tortoise 3: bottom-left, fastest leg movement ─── -->
+  <div class="tortoise-bl">
+    <svg class="tortoise-svg" viewBox="0 0 400 260" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <g>
+        <animateTransform attributeName="transform" type="rotate" values="0 80 178;25 80 178;0 80 178" dur="2.2s" repeatCount="indefinite"/>
+        <path d="M 80 178 Q 58 182 40 192"/>
+      </g>
+      <g>
+        <animateTransform attributeName="transform" type="rotate" values="18 105 200;-18 105 200;18 105 200" dur="1.2s" repeatCount="indefinite"/>
+        <path d="M 105 200 L 105 230"/><path d="M 92 230 L 118 230"/>
+      </g>
+      <g>
+        <animateTransform attributeName="transform" type="rotate" values="-18 255 200;18 255 200;-18 255 200" dur="1.2s" repeatCount="indefinite"/>
+        <path d="M 255 200 L 255 230"/><path d="M 242 230 L 268 230"/>
+      </g>
+      <path d="M 80 180 Q 60 118 120 96 Q 180 76 240 96 Q 300 118 280 180 Q 260 222 180 222 Q 100 222 80 180 Z"/>
+      <path d="M 145 132 L 172 120 L 200 132 L 200 162 L 172 172 L 145 162 Z"/>
+      <path d="M 92 132 L 118 120 L 145 132 L 145 162 L 118 172 L 92 162 Z"/>
+      <g>
+        <animateTransform attributeName="transform" type="translate" values="0 0; 3 -5; 0 0; -3 -2; 0 0" dur="3s" repeatCount="indefinite"/>
+        <path d="M 294 162 Q 328 150 348 165 Q 358 176 348 188 Q 328 200 296 192"/>
+        <circle cx="330" cy="170" r="5" fill="var(--paper-100)" stroke="currentColor" stroke-width="2.5"/>
+        <g><animateTransform attributeName="transform" type="translate" values="0 0; 2 -1; 0 0; -2 0; 0 0" dur="5s" repeatCount="indefinite"/><circle cx="330" cy="170" r="2.2" fill="currentColor"/></g>
+        <ellipse cx="330" cy="170" rx="5" ry="0" fill="var(--paper-100)" stroke="currentColor" stroke-width="2.5"><animate attributeName="ry" values="0;0;5;0;0;0;0;5;0;0" dur="4s" repeatCount="indefinite"/></ellipse>
+        <path d="M 336 182 Q 342 187 348 182"/>
+      </g>
+      <path d="M 20 240 L 380 240" stroke-dasharray="6 8" opacity="0.4" stroke-width="1.3"/>
+    </svg>
+  </div>
+
+  <!-- ─── 8 static birds (simple curved lines) ─── -->
+  <svg class="bird bird-1" viewBox="0 0 40 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M 2 12 Q 10 4 20 12 Q 30 4 38 12"/></svg>
+  <svg class="bird bird-2" viewBox="0 0 40 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M 2 12 Q 10 4 20 12 Q 30 4 38 12"/></svg>
+  <svg class="bird bird-3" viewBox="0 0 40 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M 2 12 Q 10 4 20 12 Q 30 4 38 12"/></svg>
+  <svg class="bird bird-4" viewBox="0 0 40 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M 2 12 Q 10 4 20 12 Q 30 4 38 12"/></svg>
+  <svg class="bird bird-5" viewBox="0 0 40 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M 2 12 Q 10 4 20 12 Q 30 4 38 12"/></svg>
+  <svg class="bird bird-6" viewBox="0 0 40 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M 2 12 Q 10 4 20 12 Q 30 4 38 12"/></svg>
+  <svg class="bird bird-7" viewBox="0 0 40 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M 2 12 Q 10 4 20 12 Q 30 4 38 12"/></svg>
+  <svg class="bird bird-8" viewBox="0 0 40 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M 2 12 Q 10 4 20 12 Q 30 4 38 12"/></svg>
+
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     ██  HTML SECTION B: PAGE CONTENT (everything the user scrolls past)
+     ═══════════════════════════════════════════════════════════════════ -->
+<div class="page-content">
+
+  <!-- ─── HERO: big headline + eyebrow + buttons + 4-stat bar ─── -->
+  <section class="hero">
+    <div class="hero-inner">
+      <h1>Find the college<br>that <em>fits you.</em></h1>
+      <p class="hero-lede">A data-driven decision platform for Maharashtra CET candidates, built on official CET CAP data.</p>
+      <div class="hero-actions">
+        <!-- The button scrolls down to the search section -->
+        <button class="btn-primary" onclick="document.getElementById('search').scrollIntoView()">Start Searching →</button>
+        <a class="knowledge-link" href="knowledge.html">How CETFind Works →</a>
+      </div>
+      <div class="hero-stats">
+        <!-- data-target = the number the JS counter animates to -->
+        <div class="hero-stat"><span class="hero-stat-num" data-stat="colleges" data-target="0">—</span><span class="hero-stat-label">Colleges</span></div>
+        <div class="hero-stat"><span class="hero-stat-num" data-stat="cutoff_records" data-target="0">—</span><span class="hero-stat-label">Cutoff Records</span></div>
+        <div class="hero-stat"><span class="hero-stat-num" data-stat="cap_rounds" data-target="0">—</span><span class="hero-stat-label">CAP Rounds</span></div>
+        <div class="hero-stat"><span class="hero-stat-num" data-stat="latest_year" data-target="0">—</span><span class="hero-stat-label">Latest Year</span></div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       STEP 01 — SEARCH: city, course, percentile
+       ═══════════════════════════════════════════════════════════════ -->
+  <section class="section" id="search">
+    <div class="section-inner">
+      <div class="section-head reveal">
+        <div><h2 class="section-title">Tell us about <em>you.</em></h2></div>
+        <p class="section-desc">Pick your city, choose a course, and type your CET percentile. We'll match you with colleges where you have a realistic chance.</p>
+      </div>
+      <div class="search-card reveal">
+
+        <!-- ─── Percentile input (big typable number) ─── -->
+        <div class="percentile-row percentile-row-solo">
+          <div class="percentile-block">
+            <label class="field-label" for="pctInput">Your CET Percentile</label>
+            <div class="percentile-value">
+              <!-- This is the input the user types into. No default value —
+                   the person must type their own percentile. -->
+              <input id="pctInput" type="text" inputmode="decimal" placeholder="0.00"
+                     autocomplete="off" maxlength="6">
+              <sup>%</sup>
+            </div>
+            <div class="percentile-caption" id="pctCaption">Type your exact percentile (0–100, up to 2 decimals)</div>
+          </div>
+        </div>
+
+        <!-- ─── City + Course searchable dropdowns. Options are filled in by JS. ─── -->
+        <div class="fields-grid">
+          <div class="field">
+            <label class="field-label" for="citySelect">City</label>
+            <select id="citySelect"></select>
+          </div>
+          <div class="field">
+            <label class="field-label" for="courseSelect">Course</label>
+            <select id="courseSelect"></select>
+          </div>
+        </div>
+
+        <!-- Search button — scrolls to the results section -->
+        <button class="search-submit" id="searchBtn"><span>Search Colleges →</span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       STEP 02 — RESULTS: the college list (rows are added by JS)
+       ═══════════════════════════════════════════════════════════════ -->
+  <section class="section" id="results">
+    <div class="section-inner">
+      <div class="section-head reveal">
+        <div><h2 class="section-title">Your eligible <em>colleges.</em></h2></div>
+        <p class="section-desc">Tap any college to open its full profile. Sorted by closing percentile</p>
+      </div>
+      <div class="reveal">
+
+        <!-- Top bar: count + filter-by select -->
+        <div class="results-bar">
+          <!-- "42 colleges match your profile" — numbers are set by JS -->
+          <div class="results-count"><strong id="resultCount">0</strong><span id="resultLabel">colleges match your profile</span></div>
+          <!-- Filter-by select: Rank or Percentile — JS reads data-sort -->
+          <div class="chip-group" id="sortChips">
+            <button class="chip active" data-sort="percentile">Filter by Percentile</button>
+            <button class="chip" data-sort="rank">Filter by Rank</button>
+          </div>
+        </div>
+
+        <!-- The table — tbody is EMPTY here; rows are generated by JS -->
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>College</th>
+                <th style="width:130px;">Rank of College</th>
+                <th style="width:160px;">Percentile (High–Low)</th>
+                <th style="width:150px;">Historical Cutoff Comparison</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── FOOTER ─── -->
+  <footer>
+    <div class="footer-inner">
+      <h3 class="footer-title">Data-driven.<br>Transparent. <em>Built for you.</em></h3>
+      <div class="footer-grid">
+        <div class="footer-col"><h5>Data Source</h5><p>State Common Entrance Test Cell,<br>Government of Maharashtra</p></div>
+        <div class="footer-col"><h5>Coverage</h5><p>Academic Year 2025-26</p></div>
+        <div class="footer-col"><h5>Built By</h5><p>Sanika, Vedant &amp; Sam</p></div>
+
+      </div>
+      <p style="margin-top:18px;font-size:13px"><a href="/privacy.html">Privacy Policy (Draft)</a> <span aria-hidden="true">·</span> <a href="/terms.html">Terms of Use (Draft)</a></p>
+    </div>
+  </footer>
+
+</div>
+
+<button class="feedback-launch" id="feedbackOpen" type="button" style="position:fixed;right:24px;bottom:24px;z-index:99999!important;display:inline-flex!important;visibility:visible!important;opacity:1!important;">✦ Send Feedback</button>
+
+<div class="feedback-modal" id="feedbackModal" aria-hidden="true">
+  <div class="feedback-card" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+    <div class="feedback-head"><div><h2 id="feedbackTitle">Help us improve</h2><p>Tell us what worked, what didn’t, or what you want next.</p></div><button class="feedback-close" id="feedbackClose" type="button" aria-label="Close feedback">×</button></div>
+    <label class="feedback-label">How would you rate CET Find?</label>
+    <div class="feedback-rating" id="feedbackRating" role="radiogroup" aria-label="Rating from 1 to 5">
+      <button type="button" data-rating="1" aria-label="1 out of 5">★</button><button type="button" data-rating="2" aria-label="2 out of 5">★</button><button type="button" data-rating="3" aria-label="3 out of 5">★</button><button type="button" data-rating="4" aria-label="4 out of 5">★</button><button type="button" data-rating="5" aria-label="5 out of 5">★</button>
+    </div>
+    <label class="feedback-label" for="feedbackMessage">Your feedback</label>
+    <textarea class="feedback-message" id="feedbackMessage" maxlength="2000" placeholder="Write your feedback here..."></textarea>
+    <input class="feedback-hp" id="feedbackWebsite" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <div class="feedback-status" id="feedbackStatus" aria-live="polite"></div>
+    <div class="feedback-actions"><button class="feedback-close" id="feedbackCancel" type="button">Cancel</button><button class="feedback-submit" id="feedbackSubmit" type="button">Send Feedback</button></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     ██  HTML SECTION C: THE SLIDE (drawer)
+     ───────────────────────────────────────────────────────────────────
+     Sits hidden off-screen. JS adds .open class to show it.
+       • drawerOverlay → dark blurred backdrop (click it to close)
+       • drawer        → the full-screen white panel
+       • drawerBody    → the scrollable content inside (filled by JS)
+     ═══════════════════════════════════════════════════════════════════ -->
+<div class="drawer-overlay" id="drawerOverlay"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" aria-hidden="true">
+  <div class="drawer-inner">
+
+    <!-- Header: badge + eyebrow + title + close button -->
+    <div class="drawer-head">
+      <div class="drawer-badge" id="drawerBadge">—</div>
+      <div class="drawer-headtext">
+        <div class="drawer-eyebrow" id="drawerEyebrow">—</div>
+        <h2 class="drawer-title" id="drawerTitle">—</h2>
+      </div>
+      <button class="drawer-close" id="drawerClose" aria-label="Close panel">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3 L13 13 M13 3 L3 13"/></svg>
+      </button>
+    </div>
+
+    <!-- Body: JS writes the college's full profile here -->
+    <div class="drawer-body" id="drawerBody"></div>
+  </div>
+</aside>
+
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   ██  JS SECTION 1: CONFIG — THE ONLY PLACE YOU SHOULD EDIT DATA
+   ───────────────────────────────────────────────────────────────────
+   Everything you'd normally want to change lives in this object:
+     • Brand name
+     • Default percentile
+     • City + course dropdown options
+     • Status thresholds (what counts as "safe")
+     • The full college list
+   ═══════════════════════════════════════════════════════════════════ */
+
+const API_BASE = "https://cetfind-backend.onrender.com";
+
+  /* ── Lightweight first-party usage analytics ──
+     The backend stores only an anonymous session ID plus a small allow-list
+     of product events. No names, emails, IPs, or raw URLs are sent. */
+  const ANALYTICS_SESSION_KEY = "cetfind-analytics-session-v1";
+  let ANALYTICS_SESSION_ID = localStorage.getItem(ANALYTICS_SESSION_KEY);
+  if (!ANALYTICS_SESSION_ID) {
+    ANALYTICS_SESSION_ID = (crypto.randomUUID ? crypto.randomUUID() : ("s-" + Date.now() + "-" + Math.random().toString(36).slice(2)));
+    localStorage.setItem(ANALYTICS_SESSION_KEY, ANALYTICS_SESSION_ID);
+  }
+  function trackEvent(event, data = {}) {
+    try {
+      const allowed = ["city","course","result_count","college","year","source"];
+      const safe = {};
+      allowed.forEach(k => {
+        if (data[k] !== undefined && data[k] !== null) safe[k] = String(data[k]).slice(0, 120);
+      });
+      fetch(API_BASE + "/api/analytics/event", {
+        method: "POST",
+        headers: {"Content-Type":"text/plain;charset=UTF-8"},
+        body: JSON.stringify({event, session_id: ANALYTICS_SESSION_ID, data: safe}),
+        keepalive: true
+      }).catch(() => {});
+    } catch (_) {}
+  }
+  trackEvent("page_view");
+
+const CONFIG = {
+
+  /* ── Site title shown in the topbar and browser tab ── */
+  brand: "CAP CET Finder",
+
+  /* ── No percentile is pre-filled — the person must type their own. ── */
+  defaultPercentile: null,
+
+  /* ── Dropdown option lists.
+        Filled in at runtime from the real data (see loadRealCollegeData) —
+        these placeholders are only what's shown for the instant before
+        that fetch resolves. The first item is always the empty
+        "please choose" placeholder — it is NOT a valid filter value,
+        so the results list stays empty until the person actively
+        picks both a city and a course (see getFiltered()). ── */
+  cityOptions:   [{ value: "", label: "Select City" }],
+  courseOptions: [{ value: "", label: "Select Course" }],
+
+  /* The sentinel value meaning "nothing chosen yet" */
+  unselected: "",
+
+  /* ── Status thresholds ──
+     diff = yourPercentile − collegePercentile
+        diff >= safeBand        → "Safe" (you're comfortably above)
+        diff >= borderlineBand  → "Borderline" (close call)
+        otherwise               → "Reach" (below cutoff, ambitious)  */
+  safeBand: 1.0,
+  borderlineBand: -1.0,
+
+  /* Historical cutoff comparison labels (not admission probabilities) and CSS dot classes */
+  statusLabels: { safe: "At/above highest cutoff", borderline: "Within historical range", reach: "Below historical range" },
+  statusClasses: { safe: "status-safe", borderline: "status-border", reach: "status-reach" },
+
+  /* ── Default sort applied on page load: "percentile" | "name" | "seats" ── */
+  defaultSort: "percentile",
+
+  /* ── Gap-chart defaults ──
+     If a college doesn't define its own `history`, one is auto-generated
+     from its current percentile plus these year-to-year offsets. */
+  historyYears:   [2021, 2022, 2023, 2024],
+  historyOffsets: [-1.20, -0.70, -0.35, 0.00],
+
+  /* ═════════════════════════════════════════════════════════════
+     THE COLLEGE LIST
+     ─────────────────────────────────────────────────────────────
+     Populated at page load from the FastAPI /api/options endpoint;
+     result pages are fetched from /api/search.
+     Fields present: id, name, city, course, cutoff, percentile,
+     seats, website, history, graph_history. Fields the reference-site template
+     had but the real data doesn't (fees, duration, established,
+     about, highlights, placement, eligibilityNote) are simply
+     absent — renderSlide() already skips any section whose field
+     is missing, so nothing fake is shown in their place.
+     ═════════════════════════════════════════════════════════════ */
+  colleges: []
+};
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  JS SECTION 2: SLIDE RENDERING
+   ───────────────────────────────────────────────────────────────────
+   Functions that build the HTML string that goes inside the slide.
+   If you want to change what a college slide looks like, edit these.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── getHistory(college) ─────────────────────────────────────
+   Returns the 4-year percentile history for a college.
+   If the college has its own `history` array, use that.
+   Otherwise, auto-generate one from its current percentile
+   plus the offsets defined in CONFIG.historyOffsets.          */
+function getHistory(college) {
+  if (Array.isArray(college.history) && college.history.length) {
+    return college.history;
+  }
+  const years   = CONFIG.historyYears;
+  const offsets = CONFIG.historyOffsets;
+  return years.map((y, i) => ({
+    year: y,
+    percentile: Math.max(0, Math.min(100, college.percentile + (offsets[i] ?? 0)))
+  }));
+}
+
+/* ── buildGapChart(college, userPct) ────────────────────────
+   Builds the HTML for the "gap vs cutoff across years" chart.
+   For each year, gap = userPct − thatYearCutoff.
+   Positive gaps draw bars ABOVE the zero line (dark).
+   Negative gaps draw bars BELOW the zero line (light grey).
+   The tallest bar fills the whole half-height; others scale
+   proportionally against maxAbs.                              */
+function buildGapChart(college, userPct) {
+  /* IMPORTANT: this chart has its own data source. Do NOT use
+     percentileRange(), c.low/c.high, or any all-years eligibility range.
+     graph_history contains the raw yearly MIN/MAX percentile pair for
+     this exact college+course and exact year. */
+  const rawGraphHistory = Array.isArray(college.graph_history)
+    ? college.graph_history
+    : [];
+
+  const yearRanges = rawGraphHistory
+    .map(h => {
+      const year = Number(h.year);
+      const low = Number(h.low);
+      const high = Number(h.high);
+      if (!Number.isFinite(year) || !Number.isFinite(low) || !Number.isFinite(high)) return null;
+      return {
+        year,
+        low: Math.max(0, Math.min(100, Math.min(low, high))),
+        high: Math.max(0, Math.min(100, Math.max(low, high)))
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.year - b.year);
+
+  const highest = yearRanges.reduce((a, b) => !a || b.high > a.high ? b : a, null);
+  const lowest = yearRanges.reduce((a, b) => !a || b.low < a.low ? b : a, null);
+
+  const formatPct = value => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "—";
+    return n.toFixed(2).replace(/\.?0+$/, "");
+  };
+
+  const cols = yearRanges.map(r => {
+    /* Bar height is THIS YEAR'S high percentile only.
+       Label is THIS YEAR'S high-low pair. */
+    const rangeLabel = `${formatPct(r.high)}-${formatPct(r.low)}`;
+    return `
+      <div class="d-gap-col">
+        <div class="d-gap-bar-wrap">
+          <div class="d-gap-bar" data-h="${r.high}">
+            <span class="d-gap-val">${rangeLabel}</span>
+          </div>
+        </div>
+      </div>`;
+  }).join("");
+
+  const yearsHTML = yearRanges.map(r => `<div>${r.year}</div>`).join("");
+
+  return `
+    <div class="d-section">
+      <div class="d-section-title">Cutoff Trend · Across Years</div>
+      <div class="d-gap-summary">
+        <span class="d-gap-summary-item hi">Highest: <strong>${highest ? formatPct(highest.high) : "—"}%</strong> (${highest ? highest.year : "—"})</span>
+        <span class="d-gap-summary-item lo">Lowest: <strong>${lowest ? formatPct(lowest.low) : "—"}%</strong> (${lowest ? lowest.year : "—"})</span>
+      </div>
+      <div class="d-gap-chart">
+        <div class="d-gap-plot">
+          <div class="d-gap-grid"></div>
+          <div class="d-gap-yaxis"><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div>
+          <div class="d-gap-cols">${cols}</div>
+        </div>
+        <div class="d-gap-years">${yearsHTML}</div>
+      </div>
+    </div>`;
+}
+
+/* ── renderDrawerTrendSection() ──────────────────────────────
+   Markup for the drawer's own "Cutoff trend by category & quota"
+   mini-widget. Reuses the exact same CSS classes as the page-level
+   Trends widget (.field, .round-chip, .trends-empty, .tin-card, ...)
+   so it looks like one design system, just at drawer scale. Every id
+   here is drawer-scoped (dTrend*) — createTrendsController() is handed
+   these ids fresh each time showDrawer() opens, see there for wiring.
+   Course + college aren't shown as dropdowns (they're already fixed
+   by which college was clicked) but still exist as hidden <select>s
+   so the shared controller logic needs no special-casing for them. */
+function renderDrawerTrendSection(college = {}) {
+  const hasTrend = college.has_trend !== false;
+  const hasSeat = college.has_seat_matrix === true;
+  if (!hasTrend && !hasSeat) return "";
+  return `
+    <div class="d-section">
+      <div class="d-section-title" ${hasTrend ? "" : "style=\"display:none;\""}>Cutoff Trend · by Category &amp; Quota</div>
+      <p class="d-text" style="margin-bottom:16px;${hasTrend ? "" : "display:none;"}">This college can have dozens of cutoff lines depending on category and Home/Other-University quota — pick the ones that apply to you.</p>
+
+      <select id="dTrendCourse" style="display:none"></select>
+      <select id="dTrendCollege" style="display:none"></select>
+
+      <div class="d-trend-filters d-trend-filters-drawer" style="${hasTrend ? "" : "display:none;"}">
+        <div class="field">
+          <label class="field-label">Category</label>
+          <select id="dTrendCategory" disabled>
+            <option value="">Loading…</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">Quota / Type</label>
+          <select id="dTrendQuota" disabled>
+            <option value="">Select category first</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="trends-ladies-row" style="${hasSeat ? "" : "display:none;"}">
+        <input type="checkbox" id="dTrendLadies" disabled style="display:none" aria-hidden="true">
+        <button class="chip seat-matrix-toggle" id="dSeatMatrixBtn" type="button">Seat Matrix</button>
+      </div>
+
+      <!-- Year selector. In the drawer, selecting category/quota chooses
+           the highlight only; the table below still shows ALL cutoff lines
+           for this college for the selected year, matching the PDF layout. -->
+      <div class="trends-rounds-wrap" id="dTrendYearWrap" style="display:none;">
+        <span class="trends-rounds-label">Cutoff Year — tap a year to view its full PDF-style data</span>
+        <div class="trends-rounds" id="dTrendRounds"></div>
+      </div>
+
+      <div class="trends-body d-trend-body" style="${hasTrend ? "" : "display:none;"}">
+        <div class="trends-empty" id="dTrendEmpty">
+          <div><strong>No data yet</strong>Loading this college's cutoff data…</div>
+        </div>
+        <div class="trends-loading" id="dTrendLoading" style="display:none;">Loading cutoff data…</div>
+        <div id="dTrendTable" style="display:none;"></div>
+      </div>
+
+      <div class="trends-insights" id="dTrendInsights" style="display:none;">
+        <div class="tin-card"><span class="tin-label">Highest cutoff</span><span class="tin-value" id="dTinHighest">—</span></div>
+        <div class="tin-card"><span class="tin-label">Lowest cutoff</span><span class="tin-value" id="dTinLowest">—</span></div>
+        <div class="tin-card"><span class="tin-label">Year-over-year</span><span class="tin-value" id="dTinYoy">—</span></div>
+        <div class="tin-card"><span class="tin-label">Data points</span><span class="tin-value" id="dTinCount">—</span></div>
+      </div>
+
+      <p class="trends-note" id="dTrendNote" style="${hasTrend ? "" : "display:none;"}"></p>
+
+      <!-- Seat Matrix table — hidden until the toggle above is clicked -->
+      <div id="dSeatMatrixWrap" style="display:none;">
+        <div class="d-section-title" style="margin-top:20px;">Seat Matrix</div>
+        <div id="dSeatMatrixBody"><p class="d-text">Loading seat matrix…</p></div>
+      </div>
+    </div>`;
+}
+
+/* ── renderSlide(college, userPct) ───────────────────────────
+   Builds the full HTML for the slide's body: the gap chart is now
+   the FIRST thing shown (nothing above it — the verdict banner and
+   stat grid were removed as misleading), then about text,
+   highlights, placement, admission note, and CTA buttons.          */
+function renderSlide(c, userPct) {
+  /* Highlight chips (only rendered if college.highlights exists) */
+  const highlights = (c.highlights || []).map(h => `<span class="d-chip">${h}</span>`).join("");
+
+  /* Placement bars (only if college.placement exists) */
+  const placement = c.placement ? `
+    <div class="d-section">
+      <div class="d-section-title">Placement Snapshot</div>
+      <div class="d-bars">
+        <div class="d-bar-row">
+          <span class="lbl">Placement Rate</span>
+          <div class="d-bar-track"><div class="d-bar-fill" data-w="${c.placement.rate}"></div></div>
+          <span class="val">${c.placement.rate}%</span>
+        </div>
+        <div class="d-bar-row">
+          <span class="lbl">Average CTC</span>
+          <div class="d-bar-track"><div class="d-bar-fill" data-w="65"></div></div>
+          <span class="val">${c.placement.avg}</span>
+        </div>
+        <div class="d-bar-row">
+          <span class="lbl">Highest CTC</span>
+          <div class="d-bar-track"><div class="d-bar-fill" data-w="100"></div></div>
+          <span class="val">${c.placement.highest}</span>
+        </div>
+      </div>
+    </div>` : "";
+
+  const about = c.about ? `
+    <div class="d-section">
+      <div class="d-section-title">About the Programme</div>
+      <p class="d-text">${c.about}</p>
+    </div>` : "";
+
+  const note = c.eligibilityNote ? `
+    <div class="d-section">
+      <div class="d-section-title">Admission Note</div>
+      <p class="d-text">${c.eligibilityNote}</p>
+    </div>` : "";
+
+  /* Return everything as one big HTML string */
+  return `
+    ${c.has_cutoff !== false && Array.isArray(c.graph_history) && c.graph_history.length ? buildGapChart(c, userPct) : ""}
+    ${renderDrawerTrendSection(c)}
+    ${about}
+    ${highlights ? `<div class="d-section"><div class="d-section-title">Highlights</div><div class="d-chips">${highlights}</div></div>` : ""}
+    ${placement}
+    ${note}
+
+    <div class="d-cta-row">
+      ${c.has_website && c.website ? `<a class="d-cta primary" href="${c.website}" target="_blank" rel="noopener">Visit Website ↗</a>` : ""}
+    </div>
+  `;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  JS SECTION 3: THE ENGINE
+   ───────────────────────────────────────────────────────────────────
+   Grabs DOM elements, wires up events, and drives everything.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Shortcut: `$("id")` instead of `document.getElementById("id")` ── */
+const $ = id => document.getElementById(id);
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  enhanceSelect(selectEl, opts) — searchable-dropdown wrapper
+   ───────────────────────────────────────────────────────────────────
+   Wraps a plain, already-populated <select> with a custom button +
+   panel UI, WITHOUT changing how the rest of the app talks to it: the
+   native <select> stays in the DOM (hidden), still fires "change",
+   still has a normal .value and .disabled — every existing piece of
+   code (populateSelect(), citySelect.value, etc.) keeps working
+   completely unmodified. The panel is always the same fixed size and
+   its option list scrolls once there are more items than fit, and
+   opts.search adds a live-filter search box above the list (the full
+   option list is still shown underneath, just narrowed by the
+   filter — nothing is ever removed from the underlying select). ── */
+function enhanceSelect(selectEl, opts = {}) {
+  if (!selectEl || selectEl._enhanced) return selectEl && selectEl._enhanced;
+  const search = opts.search !== false;
+
+  const wrap = document.createElement("div");
+  wrap.className = "ssel";
+  selectEl.parentNode.insertBefore(wrap, selectEl);
+  wrap.appendChild(selectEl);
+  selectEl.classList.add("ssel-native");
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "ssel-btn";
+  btn.setAttribute("aria-haspopup", "listbox");
+  btn.setAttribute("aria-expanded", "false");
+  wrap.appendChild(btn);
+
+  const panel = document.createElement("div");
+  panel.className = "ssel-panel";
+  panel.innerHTML = (search ? `<div class="ssel-search"><input type="text" placeholder="Search…" aria-label="Search options" autocomplete="off" spellcheck="false"></div>` : "")
+    + `<div class="ssel-list" role="listbox"></div>`;
+  wrap.appendChild(panel);
+
+  const searchInput = search ? panel.querySelector(".ssel-search input") : null;
+  const listEl = panel.querySelector(".ssel-list");
+
+  // Keep a lightweight normalized cache so typing does not repeatedly
+  // normalize every option or recreate listeners for every row.
+  let optionCache = [];
+  let cacheSignature = "";
+
+  const normalize = value => String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+  function refreshCache() {
+    const options = Array.from(selectEl.options);
+    const signature = options.map(o => `${o.value}\u0000${o.textContent}`).join("\u0001");
+    if (signature === cacheSignature) return;
+    cacheSignature = signature;
+    optionCache = options.map((opt, index) => ({
+      opt,
+      index,
+      label: opt.textContent,
+      normalized: normalize(opt.textContent)
+    }));
+    renderOptions("");
+  }
+
+  function rebuildList(filter) {
+    const f = normalize(filter);
+    const selected = selectEl.value;
+
+    // Rank exact/prefix/word-start matches before ordinary substring matches.
+    const matches = [];
+    for (const item of optionCache) {
+      if (!f) {
+        matches.push({ item, rank: 0 });
+        continue;
+      }
+      const text = item.normalized;
+      if (text === f) matches.push({ item, rank: 0 });
+      else if (text.startsWith(f)) matches.push({ item, rank: 1 });
+      else if (text.split(/\s+/).some(word => word.startsWith(f))) matches.push({ item, rank: 2 });
+      else if (text.includes(f)) matches.push({ item, rank: 3 });
+    }
+
+    // Keep the placeholder at the top. It is a UI control, not a city,
+    // so it must never participate in alphabetical sorting.
+    matches.sort((a, b) => a.rank - b.rank || a.item.label.localeCompare(b.item.label));
+    const orderedMatches = matches;
+
+    // Build the visible list in one DOM operation. There is one delegated
+    // click handler below, rather than one handler per option.
+    const frag = document.createDocumentFragment();
+    for (const { item } of orderedMatches) {
+      const option = item.opt;
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "ssel-item" + (option.value === selected ? " active" : "");
+      row.setAttribute("role", "option");
+      row.setAttribute("aria-selected", option.value === selected ? "true" : "false");
+      row.dataset.value = option.value;
+      row.textContent = item.label;
+      frag.appendChild(row);
+    }
+
+    if (!matches.length) {
+      const none = document.createElement("div");
+      none.className = "ssel-empty";
+      none.textContent = "No matches";
+      frag.appendChild(none);
+    }
+
+    listEl.replaceChildren(frag);
+  }
+
+  function renderOptions(filter) {
+    rebuildList(filter);
+  }
+
+  function sync() {
+    const opt = selectEl.options[selectEl.selectedIndex];
+    const placeholderText = selectEl === citySelect ? "Select City" : "Select Course";
+    btn.textContent = opt ? opt.textContent : placeholderText;
+    btn.classList.toggle("placeholder", !opt || opt.value === "");
+    btn.disabled = selectEl.disabled;
+    btn.setAttribute("aria-expanded", wrap.classList.contains("open") ? "true" : "false");
+    wrap.classList.toggle("disabled", selectEl.disabled);
+    refreshCache();
+    if (wrap.classList.contains("open")) rebuildList(searchInput ? searchInput.value : "");
+  }
+
+  function open() {
+    if (selectEl.disabled) return;
+    refreshCache();
+    const buttonRect = btn.getBoundingClientRect();
+    const panelHeight = Number.parseFloat(getComputedStyle(panel).height) || 280;
+    const spaceBelow = window.innerHeight - buttonRect.bottom;
+    const spaceAbove = buttonRect.top;
+    wrap.classList.toggle("open-up", spaceBelow < panelHeight && spaceAbove > spaceBelow);
+    wrap.classList.add("open");
+    btn.setAttribute("aria-expanded", "true");
+    if (searchInput) {
+      searchInput.value = "";
+      // Do not force the mobile keyboard open. This lets the first tap on an
+      // option select it immediately; desktop users still get instant search.
+      const touchDevice = window.matchMedia && window.matchMedia("(hover: none), (pointer: coarse)").matches;
+      if (!touchDevice) setTimeout(() => searchInput.focus(), 0);
+    }
+    rebuildList("");
+  }
+
+  function close() {
+    wrap.classList.remove("open", "open-up");
+    btn.setAttribute("aria-expanded", "false");
+  }
+
+  btn.addEventListener("click", () => wrap.classList.contains("open") ? close() : open());
+
+  // One delegated handler for all options. This makes selection reliable
+  // even when the list is rebuilt after every search.
+  listEl.addEventListener("click", e => {
+    const item = e.target.closest(".ssel-item");
+    if (!item || !listEl.contains(item)) return;
+    const value = item.dataset.value;
+    if (selectEl.value !== value) {
+      selectEl.value = value;
+      selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    close();
+    btn.focus({ preventScroll: true });
+  });
+
+  document.addEventListener("click", e => {
+    if (!wrap.contains(e.target)) close();
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") close();
+  });
+  if (searchInput) {
+    searchInput.addEventListener("input", () => rebuildList(searchInput.value));
+    searchInput.addEventListener("keydown", e => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        close();
+        btn.focus({ preventScroll: true });
+      }
+    });
+  }
+
+  new MutationObserver(sync).observe(selectEl, {
+    childList: true,
+    attributes: true,
+    attributeFilter: ["disabled"]
+  });
+  selectEl.addEventListener("change", sync);
+
+  sync();
+  const api = { sync, open, close };
+  selectEl._enhanced = api;
+  return api;
+}
+
+/* ── Grab the elements we'll interact with ── */
+const citySelect   = $("citySelect");
+const courseSelect = $("courseSelect");
+const pctInput     = $("pctInput");
+const resultsBody  = $("resultsBody");
+const resultCount  = $("resultCount");
+const resultLabel  = $("resultLabel");
+const drawer       = $("drawer");
+const drawerOverlay= $("drawerOverlay");
+const drawerBody   = $("drawerBody");
+const drawerBadge  = $("drawerBadge");
+const drawerTitle  = $("drawerTitle");
+const drawerEyebrow= $("drawerEyebrow");
+
+/* ── Live state ── */
+let currentSort = CONFIG.defaultSort;      /* which sort chip is active */
+let currentPct  = CONFIG.defaultPercentile;/* the user's percentile */
+let openId      = null;                    /* id of the college whose slide is open */
+let swapTimer   = null;                    /* timeout handle used to swap slides cleanly */
+
+/* ── populateSelects() ──
+   Fills the City + Course dropdowns from CONFIG arrays. */
+function populateSelects() {
+  citySelect.innerHTML = "";
+  courseSelect.innerHTML = "";
+  CONFIG.cityOptions.forEach(o => citySelect.add(new Option(o.label, o.value)));
+  CONFIG.courseOptions.forEach(o => courseSelect.add(new Option(o.label, o.value)));
+  citySelect.value = CONFIG.unselected;
+  courseSelect.value = CONFIG.unselected;
+}
+
+function courseDisplayLabel(value) {
+  const raw = String(value ?? "").trim();
+  const normalized = raw.toUpperCase().replace(/[.\s]/g, "");
+  const labels = {
+    BARCH: "B.Architecture",
+    MARCH: "M.Architecture",
+    BPLAN: "B.Planning",
+    MPLAN: "M.Planning",
+    BPHARM: "B.Pharmacy",
+    MPHARM: "M.Pharmacy",
+    PHARMD: "Pharm.D",
+    MTECH: "M.Tech",
+    ME: "M.E."
+  };
+  if (labels[normalized]) return labels[normalized];
+  return ["BE", "BTECH", "BE/BTECH"].includes(normalized) ? "BE / BTech" : raw;
+}
+
+/* ── loadRealCollegeData() ──────────────────────────────────
+   Fetches supported cities and courses from the FastAPI /api/options
+   endpoint and replaces the placeholder city/course option lists.
+   Runs after the initial render so the page isn't blank while the
+   fetch is in flight; re-renders once the real data is in. */
+async function loadRealCollegeData() {
+  try {
+    const response = await fetch(`${API_BASE}/api/options`, { headers: { "Accept": "application/json" } });
+    if (!response.ok) throw new Error("API options request failed: " + response.status);
+    const data = await response.json();
+
+    CONFIG.colleges = [];
+    const cities = [...new Set((data.cities || [])
+      .map(v => String(v).trim())
+      .filter(v => v && v.toLowerCase() !== "select city"))];
+    const courses = [...new Set((data.courses || [])
+      .map(v => String(v).trim())
+      .filter(v => v && v.toLowerCase() !== "select course"))];
+
+    CONFIG.cityOptions = cities.map(v => ({ value: v, label: v }));
+    // BE and BTech are alternate labels for the same engineering course family here.
+    // Keep the API value unchanged so existing filters and endpoints continue to work.
+    CONFIG.courseOptions = courses.map(v => ({
+      value: v,
+      label: courseDisplayLabel(v)
+    }));
+
+    populateSelects();
+    renderResults();
+  } catch (err) {
+    console.error("Could not load public API options:", err);
+  }
+}
+
+/* ── getStatus(userPct, lo, hi) ──
+   Returns { key, label } describing how safe the college is, based on
+   where the person's percentile falls relative to this college's
+   historical cutoff range:
+     - at/above the HIGHEST cutoff on file  → safe (cleared every round seen)
+     - at/above the LOWEST cutoff on file   → borderline (cleared the
+       easiest round on file, but not every round)
+   A college where the person doesn't even clear the lowest cutoff is
+   not eligible at all — see getFiltered(), which excludes it before
+   this function is ever called for that college. */
+function getStatus(userPct, lo, hi) {
+  if (userPct >= hi) return { key: "safe", label: CONFIG.statusLabels.safe };
+  if (userPct >= lo) return { key: "borderline", label: CONFIG.statusLabels.borderline };
+  return { key: "reach", label: CONFIG.statusLabels.reach };
+}
+
+/* ── percentileRange(college) → {hi, lo} ──
+   The highest and lowest cutoff percentile on file for this college,
+   across every year/round in its history (falls back to just its
+   current percentile if there's no history at all). This is the
+   basis for both eligibility (getFiltered) and the "chance of
+   admission" status (getStatus): the LOW end is the easiest bar this
+   college has ever had, the HIGH end is the toughest. */
+function percentileRange(c) {
+  const hist = getHistory(c);
+  const highs = hist.map(h => Number.isFinite(Number(h.high)) ? Number(h.high) : Number(h.percentile));
+  const lows  = hist.map(h => Number.isFinite(Number(h.low)) ? Number(h.low) : Number(h.percentile));
+  highs.push(Number(c.percentile));
+  lows.push(Number(c.percentile));
+  return { hi: Math.max(...highs), lo: Math.min(...lows) };
+}
+
+/* ── getFiltered() ──
+   Reads the City / Course dropdowns + currentSort, then returns the
+   filtered and sorted array of ELIGIBLE colleges — i.e. colleges
+   whose lowest historical cutoff the person's percentile actually
+   clears. A college where even its easiest-ever cutoff is out of
+   reach is not eligible and is left out entirely (rather than shown
+   and just labelled "reach"), so 52% never surfaces a college that
+   has only ever closed in the 90s. */
+function getFiltered() {
+  const city   = citySelect.value;
+  const course = courseSelect.value;
+
+  /* Nothing shows until the person has explicitly picked a city, a
+     course, AND typed a valid percentile — no defaults, no "All"
+     wildcard, so there is never a moment where the table is silently
+     populated (and clickable) before the person has actually searched. */
+  if (city === CONFIG.unselected || course === CONFIG.unselected || currentPct === null) {
+    return [];
+  }
+
+  let list = CONFIG.colleges.filter(c => c.city === city && c.course === course);
+
+  /* Eligibility: the person's percentile must clear (be >=) this
+     college's LOWEST cutoff on file. */
+  list = list.filter(c => currentPct >= percentileRange(c).lo);
+
+  if (currentSort === "rank") list.sort((a, b) => a.cutoff - b.cutoff);       /* lower rank number = more competitive, shown first */
+  else                        list.sort((a, b) => b.percentile - a.percentile); /* "percentile" (default) */
+
+  return list;
+}
+
+function renderResultsTable() {
+  const list = getFiltered();
+  const searched = citySelect.value !== CONFIG.unselected &&
+                    courseSelect.value !== CONFIG.unselected &&
+                    currentPct !== null;
+
+  /* Update the "42 colleges match" text */
+  resultCount.textContent = list.length;
+  resultLabel.textContent = list.length === 1
+    ? "college matches your profile"
+    : "colleges match your profile";
+
+  /* Nothing searched yet → prompt, not an empty result. No <tr> is
+     rendered at all here (not even a data-id-less placeholder row),
+     so there is nothing in the table for a click to accidentally land
+     on and open a slide before a real search has happened. */
+  if (!searched) {
+    resultsBody.innerHTML = `
+      <tr class="no-row"><td colspan="4">
+        <div class="empty-state">
+          <h4>Search to see colleges</h4>
+          <p>Pick a city, a course, and type your percentile above.</p>
+        </div>
+      </td></tr>`;
+    return;
+  }
+
+  /* Empty state — a real search that matched nothing */
+  if (!list.length) {
+    resultsBody.innerHTML = `
+      <tr class="no-row"><td colspan="4">
+        <div class="empty-state">
+          <h4>No colleges found</h4>
+          <p>Try a different city or course, or adjusting your percentile.</p>
+        </div>
+      </td></tr>`;
+    return;
+  }
+
+  /* Build one <tr> per college */
+  resultsBody.innerHTML = list.map((c, i) => {
+    const { hi, lo } = percentileRange(c);
+    const st = getStatus(currentPct, lo, hi);
+    return `
+      <tr data-id="${c.id}" class="${openId === c.id ? "active" : ""}">
+        <td>
+          <span class="college-name">${c.name}</span>
+          <span class="college-meta">${c.institution_code} · ${c.city ?? "City unknown"} · ${courseDisplayLabel(c.course)}</span>
+        </td>
+        <td><span class="cutoff-num">${c.cutoff}</span></td>
+        <td><span class="pct-num">${hi.toFixed(2)}–${lo.toFixed(2)}%</span></td>
+        <td>
+          <span class="status-dot ${CONFIG.statusClasses[st.key]}"></span>
+          <span class="status-label">${st.label}</span>
+        </td>
+      </tr>`;
+  }).join("");
+}
+
+let searchTimer = null;
+let searchRequest = null;
+let searchSequence = 0;
+
+function renderResults() {
+  clearTimeout(searchTimer);
+  const city = citySelect.value;
+  const course = courseSelect.value;
+  const searched = city !== CONFIG.unselected &&
+                   course !== CONFIG.unselected &&
+                   currentPct !== null;
+
+  if (!searched) {
+    CONFIG.colleges = [];
+    renderResultsTable();
+    return;
+  }
+
+  searchTimer = setTimeout(async () => {
+    const seq = ++searchSequence;
+    if (searchRequest) searchRequest.abort();
+    searchRequest = new AbortController();
+
+    try {
+      const params = new URLSearchParams({
+        course,
+        percentile: String(currentPct),
+        city,
+        sort: currentSort === "rank" ? "rank" : "comp",
+        page: "1",
+        page_size: "50"
+      });
+      const response = await fetch(`${API_BASE}/api/search?` + params.toString(), {
+        headers: { "Accept": "application/json" },
+        signal: searchRequest.signal
+      });
+      if (!response.ok) throw new Error("Search API failed: " + response.status);
+      const payload = await response.json();
+      if (seq !== searchSequence) return;
+      CONFIG.colleges = Array.isArray(payload.results) ? payload.results : [];
+      renderResultsTable();
+    } catch (err) {
+      if (err.name === "AbortError") return;
+      console.error("Could not load college search results:", err);
+      CONFIG.colleges = [];
+      renderResultsTable();
+    }
+  }, 180);
+}
+
+/* ── Click on any row in the results table ──
+   Uses event delegation: one listener handles all rows, even the
+   ones that get re-rendered later. */
+resultsBody.addEventListener("click", e => {
+  const row = e.target.closest("tr[data-id]");
+  if (!row) return;
+  toggleCollege(row.dataset.id);
+});
+
+/* ── toggleCollege(id) ──────────────────────────────────────
+   The slide-swap logic. Guarantees only ONE slide is open at a
+   time:
+     • If the SAME college is clicked while its slide is open → close it.
+     • If a DIFFERENT slide is open → close it, then open the new one.
+     • Otherwise → just open the new one.                     */
+function toggleCollege(id) {
+  const college = CONFIG.colleges.find(c => c.id === id);
+  if (!college) return;
+
+  /* Case 1: same college → toggle off */
+  if (openId === id && drawer.classList.contains("open")) {
+    closeDrawer();
+    return;
+  }
+
+  /* Case 2: another slide is open → close first, then open after a short delay
+     (the delay gives the close animation time to play) */
+  if (drawer.classList.contains("open")) {
+    closeDrawer({ keepActive: true });      /* keepActive = don't wipe .active from rows yet */
+    clearTimeout(swapTimer);
+    swapTimer = setTimeout(() => showDrawer(college), 340);
+  }
+  /* Case 3: nothing is open → just show it */
+  else {
+    showDrawer(college);
+  }
+}
+
+/* ── showDrawer(college) ──
+   Fills the slide with the college's data and opens it. */
+function showDrawer(college) {
+  openId = college.id;
+  trackEvent("college_opened", {college: college.name, city: college.city, course: college.course});
+
+  /* Fill header */
+  drawerBadge.textContent  = college.institution_code;
+  drawerEyebrow.textContent = `${college.city ?? "City unknown"} · ${courseDisplayLabel(college.course)}`;
+  drawerTitle.textContent  = college.name;
+
+  /* Fill body (the renderSlide function builds the HTML) */
+  drawerBody.innerHTML = renderSlide(college, currentPct);
+  drawerBody.scrollTop = 0;
+
+  /* Tear down the previous drawer controller and only create the
+     data controls that this specific college actually has. */
+  if (drawerTrends) drawerTrends.destroy();
+  drawerTrends = (college.has_trend || college.has_seat_matrix) ? createTrendsController({
+    mode: "drawer",
+    tCourse: "dTrendCourse", tCollege: "dTrendCollege",
+    tCategory: "dTrendCategory", tQuota: "dTrendQuota", tLadies: "dTrendLadies",
+    trendsRounds: "dTrendRounds", trendsYearWrap: "dTrendYearWrap", trendsEmpty: "dTrendEmpty",
+    trendsLoading: "dTrendLoading", trendsTable: "dTrendTable",
+    trendsInsights: "dTrendInsights", tinHighest: "dTinHighest",
+    tinLowest: "dTinLowest", tinYoy: "dTinYoy", tinCount: "dTinCount",
+    trendsNote: "dTrendNote",
+    seatMatrixBtn: "dSeatMatrixBtn", seatMatrixWrap: "dSeatMatrixWrap", seatMatrixBody: "dSeatMatrixBody",
+  }) : null;
+  if (drawerTrends) {
+    drawerTrends.init();
+    drawerTrends.lockToCollege(college.course, college.institution_code);
+  }
+
+  /* Give the open college slide its own history entry. A browser/mouse
+     Back action should dismiss Slide 2 before leaving the page. */
+  if (!history.state || history.state.cetfindDrawer !== true) {
+    history.pushState({ ...(history.state || {}), cetfindDrawer: true }, "", location.href);
+  }
+
+  /* Add .open class to trigger the CSS transition */
+  drawer.classList.add("open");
+  drawer.setAttribute("aria-hidden", "false");
+  drawerOverlay.classList.add("open");
+  document.body.classList.add("no-scroll");
+
+  /* After the slide is visible, animate the placement bars and gap-chart bars.
+     They all start at 0 height/width and grow to the value stored in data-*. */
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      drawerBody.querySelectorAll(".d-bar-fill").forEach(el => {
+        el.style.width = el.dataset.w + "%";
+      });
+      drawerBody.querySelectorAll(".d-gap-bar").forEach(el => {
+        el.style.height = el.dataset.h + "%";
+      });
+    }, 160);
+  });
+
+  /* Mark the corresponding row in the table as .active */
+  document.querySelectorAll("#resultsBody tr").forEach(tr => {
+    tr.classList.toggle("active", tr.dataset.id === college.id);
+  });
+}
+
+/* ── closeDrawer(opts) ──
+   Removes .open and clears active row state (unless keepActive is set). */
+function closeDrawer(opts = {}) {
+  drawer.classList.remove("open");
+  drawer.setAttribute("aria-hidden", "true");
+  drawerOverlay.classList.remove("open");
+  document.body.classList.remove("no-scroll");
+
+  if (!opts.keepActive) {
+    openId = null;
+    document.querySelectorAll("#resultsBody tr").forEach(tr => tr.classList.remove("active"));
+  }
+
+  /* Keep the URL/history stack tidy when the user closes via the UI. */
+  if (!opts.fromPopState && history.state && history.state.cetfindDrawer === true) {
+    history.back();
+  }
+}
+
+/* Browser or gaming-mouse Back closes the open Slide 2 first. */
+window.addEventListener("popstate", () => {
+  if (drawer.classList.contains("open")) closeDrawer({ fromPopState: true });
+});
+
+/* ── Close the slide via: X button, clicking overlay, or Escape key ── */
+$("drawerClose").addEventListener("click", () => closeDrawer());
+drawerOverlay.addEventListener("click", () => closeDrawer());
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && drawer.classList.contains("open")) closeDrawer();
+});
+
+/* ── Percentile validation ──
+   A CET percentile is always 0–100 with at most 2 decimal places
+   (e.g. 85.25). This is the ONLY shape ever accepted — invalid text
+   is blocked at the keystroke, not cleaned up after the fact, so a
+   bad value can never silently become 0 or get sent to the results. */
+const PCT_PARTIAL_RE = /^\d{0,3}(\.\d{0,2})?$/;   // allows "8", "85.", "85.2" while typing
+const PCT_FULL_RE    = /^\d{1,3}(\.\d{1,2})?$/;   // must match this to be a valid, complete value
+
+function isValidPercentile(raw) {
+  if (!PCT_FULL_RE.test(raw)) return false;
+  const v = parseFloat(raw);
+  return v >= 0 && v <= 100;
+}
+
+const pctCaption = $("pctCaption");
+
+/* ── setPercentile(value) ──
+   Only ever stores a genuinely valid 0–100 percentile in state;
+   anything else leaves currentPct at null so getFiltered() keeps the
+   results list empty rather than showing a stale/incorrect match. */
+function setPercentile(value) {
+  if (isValidPercentile(value)) {
+    currentPct = parseFloat(value);
+    pctInput.classList.remove("field-invalid");
+    pctCaption.classList.remove("field-invalid-caption");
+    pctCaption.textContent = "Type your exact percentile (0–100, up to 2 decimals)";
+  } else {
+    currentPct = null;
+  }
+  renderResults();
+}
+
+/* ── Percentile input events ── */
+pctInput.addEventListener("beforeinput", e => {
+  /* Block the keystroke outright if it would produce something that
+     can never become a valid percentile (letters, extra dots, a
+     3-digit number starting above 100, a 3rd decimal place, ...). */
+  if (e.data == null) return;   // deletions, paste-clear, etc. — let those through, checked on "input"
+  const el = e.target;
+  const next = el.value.slice(0, el.selectionStart) + e.data + el.value.slice(el.selectionEnd);
+  if (!PCT_PARTIAL_RE.test(next) || (next.length >= 3 && !next.includes(".") && parseFloat(next) > 100)) {
+    e.preventDefault();
+  }
+});
+pctInput.addEventListener("input", e => {
+  const raw = e.target.value;
+  if (raw === "" || raw === ".") { currentPct = null; renderResults(); return; }
+  if (PCT_PARTIAL_RE.test(raw) && isValidPercentile(raw)) {
+    setPercentile(raw);
+  } else if (PCT_PARTIAL_RE.test(raw)) {
+    /* Still mid-typing a potentially valid number (e.g. "85.") —
+       don't flag it as an error yet, but don't accept it either. */
+    currentPct = null;
+    renderResults();
+  } else {
+    /* Anything that slipped through beforeinput (e.g. programmatic
+       paste) and can't ever be valid — reject and flag it. */
+    e.target.value = raw.slice(0, -1);
+  }
+});
+pctInput.addEventListener("blur", e => {
+  const raw = e.target.value.trim();
+  if (raw === "") { pctCaption.textContent = "Type your exact percentile (0–100, up to 2 decimals)"; pctCaption.classList.remove("field-invalid-caption"); pctInput.classList.remove("field-invalid"); return; }
+  if (isValidPercentile(raw)) {
+    e.target.value = parseFloat(raw).toFixed(2);
+    setPercentile(e.target.value);
+  } else {
+    pctInput.classList.add("field-invalid");
+    pctCaption.classList.add("field-invalid-caption");
+    pctCaption.textContent = "Enter a percentile between 0 and 100 (e.g. 85.25)";
+    currentPct = null;
+    renderResults();
+  }
+});
+pctInput.addEventListener("keydown", e => {
+  /* Pressing Enter scrolls down to the results */
+  if (e.key === "Enter") {
+    e.target.blur();
+    $("results").scrollIntoView({ behavior: "smooth" });
+  }
+});
+
+/* ── Filters: re-render whenever a dropdown changes ── */
+citySelect.addEventListener("change", renderResults);
+courseSelect.addEventListener("change", renderResults);
+
+/* ── Sort chips: click a chip to change the sort order ── */
+$("sortChips").addEventListener("click", e => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  /* Deactivate all, activate the clicked one */
+  $("sortChips").querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+  chip.classList.add("active");
+  currentSort = chip.dataset.sort;
+  renderResults();
+});
+
+/* ── Search button: blur input, re-render, scroll to results ── */
+$("searchBtn").addEventListener("click", () => {
+  pctInput.blur();
+  const searchData = {
+    city: citySelect.value,
+    course: courseSelect.value,
+    source: "search_button"
+  };
+  trackEvent("search_started", searchData);
+  renderResults();
+  setTimeout(() => {
+    trackEvent("search_completed", {
+      ...searchData,
+      result_count: resultCount.textContent || "0"
+    });
+  }, 250);
+  $("results").scrollIntoView({ behavior: "smooth" });
+});
+
+/* ── Product-usage click tracking for dynamic Slide 2 controls ── */
+document.addEventListener("click", (event) => {
+  const website = event.target.closest(".d-cta");
+  if (website) {
+    trackEvent("college_website_clicked", {
+      source: "college_detail",
+      college: drawerTitle.textContent || ""
+    });
+  }
+  const seat = event.target.closest("#dSeatMatrixBtn");
+  if (seat) {
+    trackEvent("seat_matrix_opened", {
+      source: "college_detail",
+      college: drawerTitle.textContent || ""
+    });
+  }
+});
+
+/* ── applyBranding() ──
+   Reads CONFIG.brand and applies it to the topbar and <title>. */
+function applyBranding() {
+  document.title = CONFIG.brand + " — Find Your Future";
+}
+
+/* ── Reveal-on-scroll ──
+   Adds .in-view to any .reveal element once it's 12% visible. */
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add("in-view");
+      revealObserver.unobserve(entry.target);   /* stop watching after it's revealed */
+    }
+  });
+}, { threshold: 0.12, rootMargin: "0px 0px -50px 0px" });
+
+/* ── Hero totals: use live counts from the public PostgreSQL dataset ── */
+async function loadHeroStats() {
+  const fields = ["colleges", "cutoff_records", "cap_rounds", "latest_year"];
+  const nodes = new Map([...document.querySelectorAll(".hero-stat-num[data-stat]")].map(el => [el.dataset.stat, el]));
+  try {
+    const response = await fetch(`${API_BASE}/api/stats`, { headers: { "Accept": "application/json" } });
+    if (!response.ok) throw new Error("Statistics request failed: " + response.status);
+    const stats = await response.json();
+    for (const key of fields) {
+      const value = Number(stats[key]);
+      const el = nodes.get(key);
+      if (!el || !Number.isFinite(value) || value < 0) continue;
+      el.dataset.target = String(Math.trunc(value));
+      animateCounter(el, Math.trunc(value));
+    }
+  } catch (err) {
+    console.error("Could not load live public statistics:", err);
+    nodes.forEach(el => { el.textContent = "—"; });
+  }
+}
+
+/* ── Hero number counter animation ── */
+function animateCounter(el, target, duration = 1400) {
+  const start = performance.now();
+  function tick(now) {
+    const progress = Math.min((now - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);   /* ease-out cubic */
+    el.textContent = Math.floor(eased * target);
+    if (progress < 1) requestAnimationFrame(tick);
+    else el.textContent = target;
+  }
+  requestAnimationFrame(tick);
+}
+const counterObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const el = entry.target;
+      const target = parseInt(el.dataset.target, 10);
+      if (!isNaN(target)) animateCounter(el, target);
+      counterObserver.unobserve(el);
+    }
+  });
+}, { threshold: 0.5 });
+
+/* ═══════════════════════════════════════════════════════════════════
+   ██  JS SECTION 3: CUTOFF TRENDS WIDGET
+   ───────────────────────────────────────────────────────────────────
+   Drawer-scoped module (own namespace, Trends) for college-specific
+   cutoff and seat-matrix views. Filter metadata, one college/year's raw
+   cutoff rows and seat rows are fetched from the FastAPI API on demand.
+   PostgreSQL remains server-side; no course-wide data file is sent to
+   the browser.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Shared course-data cache ──
+   Course JSON (cutoffs_BBA.json etc.) doesn't depend on which widget
+   is asking for it, so every controller instance (the page-level
+   widget AND every drawer instance) shares one cache and never
+   re-fetches a course that's already been loaded. ── */
+const cutoffDataCache = new Map();
+
+/* ── createTrendsController(ids) ──
+   Factory that builds one independent cutoff-trends widget: its own
+   state, its own Chart.js instance, its own DOM refs — bound to
+   whatever element ids you pass in. `ids` is a map from the internal
+   role name (tCourse, tBranch, ... trendsTable, ...) to the actual
+   id in the DOM, so the exact same logic can drive both the
+   page-level widget (ids match the literal element ids) and a
+   fresh instance created inside the drawer each time it opens
+   (ids point at drawer-scoped elements instead). ── */
+function createTrendsController(ids) {
+
+  const COURSES = ["BE", "BBA", "BCA", "MBA", "MCA"];
+
+  const cache = cutoffDataCache;
+  const state = {
+    course: null, branch: null, college: null, ladies: false,
+    category: null, quota: null,
+    selectedYear: null,        // which year's table is currently shown
+    view: "years",             // "years" (per-year cutoff table) or "seats" (seat matrix)
+    drawerOptions: null,       // small precomputed metadata fetched from PostgreSQL
+    selectedProgramCode: '',
+  };
+  // The drawer keeps one engineering program selected across both views.
+  let selectedDrawerProgram = null;
+  const isEngineeringCourse = () => /^(BE|B\.E\.?|BTECH|B\.TECH|BE\/BTECH|B\.E\.?\/B\.?TECH|ENGINEERING)/i.test(String(state.course || '').trim());
+
+  /* ── DOM refs ── */
+  const els = {};
+  function bindEls() {
+    Object.keys(ids).forEach(role => {
+      if (role === "mode") return;   // "mode" is a flag, not a DOM id
+      els[role] = document.getElementById(ids[role]);
+    });
+  }
+
+  /* ── populateSelect(el, items, placeholder) ──
+     items: array of {value, label}. Keeps the previous selection if it's
+     still present in the new list; otherwise falls back to placeholder. */
+  function populateSelect(el, items, placeholder) {
+    const prev = el.value;
+    el.innerHTML = "";
+    const ph = document.createElement("option");
+    ph.value = ""; ph.textContent = placeholder;
+    el.appendChild(ph);
+    items.forEach(({ value, label }) => {
+      const opt = document.createElement("option");
+      opt.value = value; opt.textContent = label;
+      el.appendChild(opt);
+    });
+    const stillThere = items.some(i => i.value === prev);
+    el.value = stillThere ? prev : "";
+    el.disabled = items.length === 0;
+    if (el._enhanced && typeof el._enhanced.sync === "function") el._enhanced.sync();
+    return stillThere;
+  }
+
+  /* ── loadCollegeYear(course, college, year) → Promise<data> (cached) ──
+     Drawer fast path. Only the selected college + year payload is loaded.
+     The compact drawer metadata comes from the trend-options API, so
+     Category/Quota controls never wait for this larger raw-row payload. ── */
+  const collegeYearCache = new Map();
+  async function loadCollegeYear(course, college, year) {
+    const key = `${course}:${year}:${college}`;
+    if (collegeYearCache.has(key)) return collegeYearCache.get(key);
+    const response = await fetch(
+      `${API_BASE}/api/colleges/${encodeURIComponent(college)}/year/${encodeURIComponent(year)}?course=${encodeURIComponent(course)}`,
+      { headers: { "Accept": "application/json" } }
+    );
+    if (!response.ok) throw new Error(`Could not load cutoff data for ${college} (${course}, ${year})`);
+    const data = await response.json();
+    if (!data || !Array.isArray(data.pdf_rows)) throw new Error(`Invalid cutoff response for ${college} (${course}, ${year})`);
+    collegeYearCache.set(key, data);
+    return data;
+  }
+
+  /* ── loadSeats(course, college) → Promise<data> (cached) ──
+     Fetches source-ordered seat rows and official PDF metadata from
+     the backend for the selected college. Powers the Seat Matrix view. */
+  const seatDataCache = window.__seatDataCache || (window.__seatDataCache = new Map());
+  async function loadSeats(course, college) {
+    const key = `${course}:${college}`;
+    if (seatDataCache.has(key)) return seatDataCache.get(key);
+    const response = await fetch(
+      `${API_BASE}/api/colleges/${encodeURIComponent(college)}/seats?course=${encodeURIComponent(course)}`,
+      { headers: { "Accept": "application/json" } }
+    );
+    if (!response.ok) throw new Error(`Could not load seat matrix for ${college} (${course})`);
+    const payload = await response.json();
+    // Keep the full server payload: data rows plus source-PDF course summary
+    // fields. Returning only payload.data would discard the very metadata
+    // needed to reproduce the official seat-matrix page.
+    seatDataCache.set(key, payload);
+    return payload;
+  }
+
+  function currentData() {
+    return cache.get(state.course);
+  }
+
+  /* ── Filter helpers — each narrows `groups` by everything decided so far ── */
+  function groupsForBranch(data, branchId) {
+    return data.groups.filter(g => String(g.branch) === String(branchId));
+  }
+  function groupsForCollege(data, branchId, collegeCode) {
+    return groupsForBranch(data, branchId).filter(g => g.college === collegeCode);
+  }
+  function groupsForCollegeAnyBranch(data, collegeCode) {
+    return data.groups.filter(g => g.college === collegeCode);
+  }
+  function groupsForLadies(data, branchId, collegeCode, ladies) {
+    return groupsForCollege(data, branchId, collegeCode).filter(g => g.ladies === ladies);
+  }
+  function groupsForCategory(data, branchId, collegeCode, ladies, category) {
+    return groupsForLadies(data, branchId, collegeCode, ladies).filter(g => g.category === category);
+  }
+
+  function uniqueBy(arr, keyFn, labelFn) {
+    const seen = new Map();
+    arr.forEach(item => { const k = keyFn(item); if (!seen.has(k)) seen.set(k, labelFn(item)); });
+    return [...seen.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  /* ── Cascade rebuilders ── */
+
+  function rebuildBranches() {
+    const data = currentData();
+    const items = uniqueBy(data.groups, g => String(g.branch), g => data.branches[String(g.branch)] || `#${g.branch}`);
+    populateSelect(els.tBranch, items, items.length ? "Select branch" : "No branches with data");
+  }
+
+  function rebuildColleges() {
+    const data = currentData();
+    if (!state.branch) { populateSelect(els.tCollege, [], "Select branch first"); return; }
+    const items = uniqueBy(groupsForBranch(data, state.branch), g => g.college, g => data.colleges[g.college] || g.college);
+    populateSelect(els.tCollege, items, items.length ? "Select college" : "No colleges with data for this branch");
+  }
+
+
+  function rebuildLadiesToggle() {
+    const data = currentData();
+    if (!state.college) { els.tLadies.disabled = true; els.tLadies.checked = false; state.ladies = false; return; }
+    const rows = ids.mode === "drawer"
+      ? groupsForCollegeAnyBranch(data, state.college)
+      : groupsForCollege(data, state.branch, state.college);
+    const hasLadies = rows.some(g => g.ladies);
+    els.tLadies.disabled = !hasLadies;
+    if (!hasLadies) { els.tLadies.checked = false; state.ladies = false; }
+  }
+
+  function drawerMeta() {
+    return state.drawerOptions || null;
+  }
+
+  function rebuildDrawerCategories() {
+    const meta = drawerMeta();
+    if (!meta) { populateSelect(els.tCategory, [], "No categories with data for this college"); return; }
+    const items = (meta.c && meta.c[state.ladies ? "1" : "0"]) || [];
+    const labels = (window.__DRAWER_LABELS__ && window.__DRAWER_LABELS__.categories) || {};
+    populateSelect(els.tCategory, items.map(x => ({value:x.v, label:labels[x.v] || x.v})),
+      items.length ? "Select category" : "No categories with data for this college");
+  }
+
+  function rebuildDrawerQuotas() {
+    const meta = drawerMeta();
+    if (!meta || !state.category) { populateSelect(els.tQuota, [], "Select category first"); return; }
+    const cats = (meta.c && meta.c[state.ladies ? "1" : "0"]) || [];
+    const found = cats.find(x => x.v === state.category);
+    const labels = (window.__DRAWER_LABELS__ && window.__DRAWER_LABELS__.sections) || {};
+    const items = (found ? found.q : []).map(code => ({value: code, label: labels[code] || code}));
+    populateSelect(els.tQuota, items, items.length ? "Select quota / type" : "No quota/type data for this category");
+  }
+
+  function rebuildCategories() {
+    const data = currentData();
+    if (!state.college) { populateSelect(els.tCategory, [], "Select college first"); return; }
+    const rows = ids.mode === "drawer"
+      ? groupsForCollegeAnyBranch(data, state.college).filter(g => g.ladies === state.ladies)
+      : groupsForLadies(data, state.branch, state.college, state.ladies);
+    const items = uniqueBy(rows, g => g.category, g => (data.categories[g.category] || {}).full || g.category);
+    populateSelect(els.tCategory, items,
+      items.length ? "Select category" : "No categories with data for this college");
+  }
+
+  function rebuildQuotas() {
+    const data = currentData();
+    if (!state.college || !state.category) { populateSelect(els.tQuota, [], "Select category first"); return; }
+    const rows = ids.mode === "drawer"
+      ? groupsForCollegeAnyBranch(data, state.college).filter(g => g.ladies === state.ladies && g.category === state.category)
+      : groupsForCategory(data, state.branch, state.college, state.ladies, state.category);
+    const items = uniqueBy(rows, g => g.section, g => data.sections[g.section] || g.section);
+    populateSelect(els.tQuota, items,
+      items.length ? "Select quota / type" : "No quota/type data for this category");
+  }
+
+  function findGroups() {
+    const data = currentData();
+    if (!data || !state.college || !state.category || !state.quota) return [];
+    if (ids.mode === "drawer") {
+      return data.groups.filter(g =>
+        g.college === state.college &&
+        g.ladies === state.ladies &&
+        g.category === state.category &&
+        g.section === state.quota
+      );
+    }
+    if (!state.branch) return [];
+    const group = data.groups.find(g =>
+      String(g.branch) === String(state.branch) && g.college === state.college &&
+      g.ladies === state.ladies && g.category === state.category && g.section === state.quota) || null;
+    return group ? [group] : [];
+  }
+
+  /* ── Table + insights rendering ──
+     Page-level widget keeps its category/quota-specific trend table.
+     Drawer widget uses a separate PDF-style renderer: category/quota
+     selections identify the user's choice for highlighting, but the
+     rendered table contains ALL cutoff lines for this college/year,
+     preserving the structure represented by the source PDFs. */
+
+  const DEFAULT_EMPTY_HTML = ids.mode === "drawer"
+    ? "<strong>No data yet</strong>Pick a category and quota/type above to see the cutoff data for this college."
+    : "<strong>No data yet</strong>Pick a course, college, category and quota/type above to see the cutoff data.";
+
+  function showEmpty(message) {
+    els.trendsTable.style.display = "none";
+    els.trendsTable.innerHTML = "";
+    els.trendsLoading.style.display = "none";
+    els.trendsEmpty.style.display = "flex";
+    els.trendsEmpty.querySelector("div").innerHTML = message || DEFAULT_EMPTY_HTML;
+    els.trendsInsights.style.display = "none";
+    els.trendsRounds.innerHTML = "";
+    if (els.trendsYearWrap) els.trendsYearWrap.style.display = "none";
+    delete els.trendsRounds.dataset.forGroup;
+    els.trendsNote.textContent = "";
+    els.trendsNote.className = "trends-note";
+  }
+
+  /* finalPerYear(points) → [{year, percentile, round}] using, for each
+     year, the point from the LATEST round available that year (not the
+     lowest percentile — "last round" and "lowest percentile" usually
+     agree but round number is the more literal reading of "final"). */
+  function finalPerYear(points) {
+    const byYear = new Map();
+    points.forEach(p => {
+      const cur = byYear.get(p.year);
+      if (!cur || p.round > cur.round) byYear.set(p.year, p);
+    });
+    return [...byYear.values()].sort((a, b) => a.year - b.year);
+  }
+
+  /* renderYearChips(years) — one chip per year on file; clicking a
+     year shows that year's table below (see renderYearTable). */
+  function renderYearChips(years) {
+    els.trendsRounds.innerHTML = "";
+    if (els.trendsYearWrap) els.trendsYearWrap.style.display = years.length ? "block" : "none";
+    years.forEach(y => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "round-chip" + (state.selectedYear === y ? " active" : "");
+      chip.textContent = y;
+      chip.addEventListener("click", () => {
+        state.selectedYear = y;
+        renderCurrentGroup();
+      });
+      els.trendsRounds.appendChild(chip);
+    });
+  }
+
+  /* renderYearTable(points, year, group) — a bordered table for one
+     year, in the same Round / Percentile / Rank layout the official
+     CET cutoff PDFs use for a single category+quota thread. Flexible
+     to however many rounds that year actually has on file (1–4). */
+  function renderYearTable(points, year, group) {
+    const rows = points.filter(p => p.year === year).sort((a, b) => a.round - b.round);
+    const data = currentData();
+    const catLabel = (data.categories[group.category] || {}).full || group.category;
+    const quotaLabel = data.sections[group.section] || group.section;
+
+    els.trendsTable.style.display = "block";
+    if (!rows.length) {
+      els.trendsTable.innerHTML = `<p class="d-text">No rounds on file for ${year}.</p>`;
+      return;
+    }
+    els.trendsTable.innerHTML = `
+      <div class="pdf-table-title">${catLabel}${group.ladies ? " · Ladies" : ""} · ${quotaLabel} · ${year}</div>
+      <table class="pdf-table">
+        <thead><tr><th>Round</th><th>Percentile</th><th>Rank</th></tr></thead>
+        <tbody>
+          ${rows.map(p => `<tr><td>Round ${p.round}</td><td>${p.percentile.toFixed(2)}%</td><td>${p.rank}</td></tr>`).join("")}
+        </tbody>
+      </table>`;
+  }
+
+  function renderInsights(points, years) {
+    const highest = points.reduce((a, b) => (b.percentile > a.percentile ? b : a));
+    const lowest = points.reduce((a, b) => (b.percentile < a.percentile ? b : a));
+    els.tinHighest.textContent = `${highest.percentile.toFixed(2)}% (${highest.year} · R${highest.round})`;
+    els.tinLowest.textContent = `${lowest.percentile.toFixed(2)}% (${lowest.year} · R${lowest.round})`;
+
+    const finalPts = finalPerYear(points);
+    const yoyEl = els.tinYoy;
+    if (finalPts.length < 2) {
+      yoyEl.textContent = "Not enough years";
+      yoyEl.className = "tin-value";
+    } else {
+      const a = finalPts[finalPts.length - 2], b = finalPts[finalPts.length - 1];
+      const delta = b.percentile - a.percentile;
+      const sign = delta >= 0 ? "+" : "−";
+      yoyEl.textContent = `${sign}${Math.abs(delta).toFixed(2)} pts (${a.year}→${b.year})`;
+      yoyEl.className = "tin-value " + (delta >= 0 ? "up" : "down");
+    }
+
+    els.tinCount.textContent = `${points.length} (${years.length} yr${years.length === 1 ? "" : "s"})`;
+
+    if (points.length <= 2) {
+      els.trendsNote.textContent = `Limited data: only ${points.length} data point${points.length === 1 ? "" : "s"} on file for this combination.`;
+      els.trendsNote.className = "trends-note warn";
+    } else {
+      els.trendsNote.textContent = "";
+      els.trendsNote.className = "trends-note";
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  /* renderDrawerAllData() — reconstructs the cutoff-PDF shape from the
+     raw ingested cutoff rows. Category/quota are NOT filters here.
+     They only determine the highlighted column/cell. The actual rows
+     remain college-specific and contain every category/section/stage
+     present in the database for the selected year. */
+  async function renderDrawerAllData() {
+    const meta = drawerMeta();
+    if (!meta || !state.college) { showEmpty(); return; }
+    const years = Array.isArray(meta.y)
+      ? meta.y.map(Number).filter(Number.isFinite).sort((a,b)=>a-b)
+      : [];
+    if (!years.length) {
+      showEmpty("<strong>No cutoff data on file</strong>This college has no cutoff years in the current export.");
+      return;
+    }
+    if (!years.includes(Number(state.selectedYear))) state.selectedYear = years[years.length - 1];
+
+    els.trendsEmpty.style.display = "none";
+    els.trendsInsights.style.display = "none";
+    els.trendsLoading.style.display = "flex";
+    try {
+      const data = await loadCollegeYear(state.course, state.college, state.selectedYear);
+      const allCollegeRows = Array.isArray(data.pdf_rows) ? data.pdf_rows : [];
+      const collegeRows = allCollegeRows.filter(r => r.ladies === state.ladies);
+      els.trendsLoading.style.display = "none";
+
+      if (!allCollegeRows.length) {
+        showEmpty("<strong>No cutoff data on file</strong>This college has no raw cutoff lines for the selected seat type/year.");
+        return;
+      }
+
+      const groupKey = `${state.college}|${state.ladies}|${state.category || ""}|${state.quota || ""}`;
+      if (els.trendsRounds.dataset.forGroup !== groupKey) {
+        els.trendsRounds.dataset.forGroup = groupKey;
+      }
+      renderYearChips(years);
+
+      const seatPayloadForBranches = isEngineeringCourse() ? await loadSeats(state.course, state.college) : null;
+      const seatMetadataForBranches = seatPayloadForBranches && seatPayloadForBranches.course_metadata ? seatPayloadForBranches.course_metadata : {};
+      const seatOnlyLabels = {};
+      const branchLabel = id => data.branches[String(id)] || seatOnlyLabels[String(id)] || `#${id}`;
+      const programCodeByBranch = new Map();
+      allCollegeRows.forEach(r => {
+        const id = String(r.branch);
+        const code = String(r.program_code || '');
+        if (code && !programCodeByBranch.has(id)) programCodeByBranch.set(id, code);
+      });
+      for (const [code, meta] of Object.entries(seatMetadataForBranches)) {
+        if (![...programCodeByBranch.values()].includes(String(code))) {
+          const id = `@choice:${code}`;
+          programCodeByBranch.set(id, String(code));
+          seatOnlyLabels[id] = `${meta.course_name || 'Engineering branch'} · cutoff unavailable`;
+        }
+      }
+      const branchIds = [...new Set([...allCollegeRows.map(r => String(r.branch)), ...[...programCodeByBranch.keys()].filter(id => id.startsWith('@choice:'))])]
+        .sort((a,b) => (programCodeByBranch.get(a) || a).localeCompare(programCodeByBranch.get(b) || b));
+      if (!branchIds.includes(String(selectedDrawerProgram))) selectedDrawerProgram = branchIds[0] || null;
+      const activeProgram = String(selectedDrawerProgram || '');
+      const yearRows = collegeRows.filter(r => String(r.branch) === activeProgram);
+      const activeProgramRow = allCollegeRows.find(r => String(r.branch) === activeProgram && r.program_code)
+        || allCollegeRows.find(r => String(r.branch) === activeProgram);
+      state.selectedProgramCode = activeProgramRow ? String(activeProgramRow.program_code || '') : (programCodeByBranch.get(activeProgram) || '');
+      /* Section labels are small enough to derive from the raw code using
+         the same label map embedded in the course-year payload when present. */
+      const SECTION_LABELS = {
+        HU: "Home University",
+        OHU: "Other Than Home University",
+        HU_TO_OHU: "Other Than Home University Seats Allotted to Home University Candidates",
+        OHU_TO_HU: "Home University Seats Allotted to Other Than Home University Candidates",
+        SL: "State Level",
+        PWD: "PWD",
+        DEF: "Defense",
+        MI_MIN: "Minority",
+        MI_NONMIN: "Non-Minority"
+      };
+      const sectionLabel = code => SECTION_LABELS[code] || code;
+
+      const selectedSection = state.quota || null;
+      const selectedCategory = state.category || null;
+      const tableBlocks = [];
+
+      const branches = yearRows.length ? [activeProgram] : [];
+
+      branches.forEach(branch => {
+        const branchRows = yearRows.filter(r => String(r.branch) === branch);
+        const rounds = [...new Set(branchRows.map(r => Number(r.round)).filter(Number.isFinite))]
+          .sort((a,b) => a-b);
+
+        rounds.forEach(round => {
+          const roundRows = branchRows.filter(r => Number(r.round) === round);
+          const sections = [...new Set(roundRows.map(r => r.section))]
+            .sort((a,b) => sectionLabel(a).localeCompare(sectionLabel(b)));
+
+          sections.forEach(section => {
+            const sectionRows = roundRows.filter(r => r.section === section);
+            if (!sectionRows.length) return;
+
+            const categories = [];
+            const seenCat = new Set();
+            sectionRows.forEach(r => {
+              const rawCat = r.raw_category || r.category;
+              if (!seenCat.has(rawCat)) {
+                seenCat.add(rawCat);
+                categories.push(rawCat);
+              }
+            });
+
+            const stages = [];
+            const seenStage = new Set();
+            sectionRows.forEach(r => {
+              const stage = r.stage || `Round ${r.round}`;
+              if (!seenStage.has(stage)) {
+                seenStage.add(stage);
+                stages.push(stage);
+              }
+            });
+
+            const cell = (stage, rawCat) => {
+              const cellRows = sectionRows.filter(r =>
+                (r.stage || `Round ${r.round}`) === stage &&
+                (r.raw_category || r.category) === rawCat
+              );
+              return cellRows.map(r => {
+                const pct = Number(r.percentile);
+                const pctText = Number.isFinite(pct)
+                  ? pct.toFixed(7).replace(/0+$/, "").replace(/\.$/, "")
+                  : "—";
+                const rankText = r.rank == null ? "—" : escapeHtml(r.rank);
+                return `<div class="pdf-cell-line">${rankText} (${pctText})</div>`;
+              }).join("");
+            };
+
+            const specializationTitle = escapeHtml(branchLabel(branch));
+            const sectionTitle = escapeHtml(sectionLabel(section));
+            const selectedSectionHere = selectedSection === section;
+
+            tableBlocks.push(`
+              <div class="pdf-round-title">${specializationTitle} · Round ${round}</div>
+              <div class="pdf-table-title ${selectedSectionHere ? "pdf-selected-title" : ""}">${sectionTitle}${selectedSectionHere ? " · Selected quota" : ""}</div>
+              <table class="pdf-table drawer-pdf-table">
+                <thead><tr>
+                  <th>Stage</th>
+                  ${categories.map(rawCat => {
+                    const rowForCat = sectionRows.find(r => (r.raw_category || r.category) === rawCat);
+                    const selected = selectedSectionHere && selectedCategory === rowForCat.category;
+                    return `<th class="${selected ? "pdf-selected" : ""}">${escapeHtml(rawCat)}</th>`;
+                  }).join("")}
+                </tr></thead>
+                <tbody>
+                  ${stages.map(stage => `
+                    <tr>
+                      <td class="pdf-cat">${escapeHtml(stage)}</td>
+                      ${categories.map(rawCat => {
+                        const rowForCat = sectionRows.find(r => (r.raw_category || r.category) === rawCat);
+                        const selected = selectedSectionHere && selectedCategory === rowForCat.category;
+                        return `<td class="${selected ? "pdf-selected" : ""}">${cell(stage, rawCat)}</td>`;
+                      }).join("")}
+                    </tr>`).join("")}
+                </tbody>
+              </table>`);
+          });
+        });
+      });
+
+      const activeIndex = branchIds.indexOf(activeProgram);
+      const branchSelector = isEngineeringCourse() && branchIds.length > 1 ? `
+        <div class="engineering-branch-selector" aria-label="Engineering branch selector">
+          <button type="button" class="engineering-branch-arrow" data-branch-prev aria-label="Previous branch" ${activeIndex <= 0 ? 'disabled' : ''}>←</button>
+          <div class="engineering-branch-current"><span>Branch ${activeIndex + 1} of ${branchIds.length}</span><strong>${escapeHtml(branchLabel(activeProgram))}</strong></div>
+          <button type="button" class="engineering-branch-arrow" data-branch-next aria-label="Next branch" ${activeIndex >= branchIds.length - 1 ? 'disabled' : ''}>→</button>
+        </div>` : '';
+      const noBranchRows = !yearRows.length
+        ? `<p class="d-text">No cutoff rows are recorded for ${escapeHtml(branchLabel(activeProgram))} for this year and seat type. No other branch's data is substituted.</p>`
+        : '';
+      els.trendsTable.style.display = "block";
+      els.trendsTable.innerHTML = `
+        <p class="pdf-view-note">Showing cutoff lines for ${escapeHtml(branchLabel(activeProgram))} at this college for ${state.selectedYear}. Other branches are kept separate. Your selected category + quota is highlighted.</p>
+        ${noBranchRows}${tableBlocks.join("")}${branchSelector}`;
+    } catch (err) {
+      els.trendsLoading.style.display = "none";
+      showEmpty(`<strong>Couldn't load cutoff data</strong>${escapeHtml(err.message)}`);
+    }
+  }
+
+  /* renderCurrentGroup() — the year-table equivalent of the old
+     renderChart(): finds the selected group, builds the year chips
+     (once per selection) and renders the table for state.selectedYear
+     (defaulting to the most recent year on file). */
+  function renderCurrentGroup() {
+    if (ids.mode === "drawer") {
+      renderDrawerAllData();
+      return;
+    }
+    const groups = findGroups();
+    if (!groups.length) { showEmpty("No cutoff data on file for this exact combination."); return; }
+
+    const allPoints = groups.flatMap(g => g.points);
+    if (!allPoints.length) { showEmpty("No cutoff data on file for this exact combination."); return; }
+
+    els.trendsEmpty.style.display = "none";
+    els.trendsLoading.style.display = "none";
+    els.trendsInsights.style.display = "grid";
+
+    const years = [...new Set(allPoints.map(p => p.year))].sort((a, b) => a - b);
+    const groupKey = ids.mode === "drawer"
+      ? `${state.college}|${state.category}|${state.ladies}|${state.quota}`
+      : `${state.branch}|${state.college}|${state.category}|${state.ladies}|${state.quota}`;
+    if (els.trendsRounds.dataset.forGroup !== groupKey) {
+      state.selectedYear = years[years.length - 1];
+      renderYearChips(years);
+      els.trendsRounds.dataset.forGroup = groupKey;
+    } else {
+      renderYearChips(years);
+    }
+
+    els.trendsTable.style.display = "block";
+    els.trendsTable.innerHTML = groups.map(group => {
+      const data = currentData();
+      const branchLabel = data.branches[String(group.branch)] || `#${group.branch}`;
+      const rows = group.points.filter(p => p.year === state.selectedYear).sort((a, b) => a.round - b.round);
+      const catLabel = (data.categories[group.category] || {}).full || group.category;
+      const quotaLabel = data.sections[group.section] || group.section;
+      if (!rows.length) return `<div class="pdf-table-title">${branchLabel} · ${catLabel}${group.ladies ? " · Ladies" : ""} · ${quotaLabel} · ${state.selectedYear}</div><p class="d-text">No rounds on file for ${state.selectedYear}.</p>`;
+      return `
+        <div class="pdf-table-title">${branchLabel} · ${catLabel}${group.ladies ? " · Ladies" : ""} · ${quotaLabel} · ${state.selectedYear}</div>
+        <div class="pdf-table-scroll">
+          <table class="pdf-table">
+            <thead><tr><th>Round</th><th>Percentile</th><th>Rank</th></tr></thead>
+            <tbody>${rows.map(p => `<tr><td>Round ${p.round}</td><td>${p.percentile.toFixed(2)}%</td><td>${p.rank}</td></tr>`).join("")}</tbody>
+          </table>
+        </div>`;
+    }).join('<div style="height:18px;"></div>');
+
+    renderInsights(allPoints, years);
+  }
+
+  /* ── Seat Matrix view ──
+     Render the extracted seat-matrix data in the official CAP PDF's structure.
+     Source summary labels/values, affiliation, CAP seats, EWS/TFWS and common
+     reserved-seat notes are retained with each choice code. Category order is
+     taken from source-row order, and missing course metadata means the table
+     is withheld rather than reconstructed from guessed labels. */
+  const SEAT_ALLOC_LABEL = {
+    "State Level": "State Level",
+    HU: "HU",
+    OHU: "OHU",
+    PWD: "PWD",
+    DEF: "DEF"
+  };
+  function seatRowsByCategory(rows) {
+    // The API returns rows in source-PDF order. Do not sort or whitelist the
+    // category names here: that used to hide valid categories and reorder the
+    // official table.
+    return rows;
+  }
+
+  function seatPdfHeaderHtml(collegeName, course, code, choiceCount, metadata) {
+    const meta = metadata || {};
+    const summary = meta.summary_fields && typeof meta.summary_fields === "object"
+      ? Object.entries(meta.summary_fields) : [];
+    const summaryHtml = summary.length ? `
+      <div class="seat-pdf-course-summary-wrap">
+        <table class="seat-pdf-course-summary">
+          <thead><tr><th>Choice Code</th><th>Course Name</th>${summary.map(([label]) => `<th>${escapeHtml(label)}</th>`).join("")}</tr></thead>
+          <tbody><tr><td>${escapeHtml(code)}</td><td>${escapeHtml(meta.course_name || "—")}</td>${summary.map(([, value]) => `<td>${escapeHtml(value == null ? "—" : String(value))}</td>`).join("")}</tr></tbody>
+        </table>
+      </div>` : "";
+    const details = [
+      ["University / Institute", meta.university],
+      ["Affiliation / Status", meta.affiliation_status],
+      ["CAP Seats", meta.cap_seats],
+      ["Source PDF / Page", meta.source_pdf ? `${meta.source_pdf} / p.${meta.source_page ?? "—"}` : ""],
+      ["EWS Seats", meta.ews_seats],
+      ["PWD Common Reserved Seats", meta.pwd_common_reserved],
+      ["DEF Common Reserved Seats", meta.def_common_reserved],
+      [meta.tfws_choice_code ? "TFWS Choice Code / Seats" : "", meta.tfws_choice_code ? `${meta.tfws_choice_code} / ${meta.tfws_seats ?? "—"}` : ""]
+    ].filter(([label, value]) => label && value !== null && value !== undefined && value !== "");
+    const detailHtml = details.length ? `
+      <div class="seat-pdf-details">
+        ${details.map(([label, value]) => `<div class="seat-pdf-detail"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`).join("")}
+      </div>` : "";
+    return `
+      <div class="seat-pdf-head">
+        <div class="seat-pdf-institution">${escapeHtml(meta.institution_name || collegeName || "College")}</div>
+        <div class="seat-pdf-subline">Seat Matrix · ${escapeHtml(courseDisplayLabel(course))}${choiceCount > 1 ? ` · ${choiceCount} choice codes in this college` : ""}</div>
+        ${detailHtml}${summaryHtml}
+      </div>`;
+  }
+
+  function seatMatrixTableHtml(allocs) {
+    const entries = Object.entries(allocs);
+    const categories = [];
+    const seen = new Set();
+    for (const [, rows] of entries) {
+      for (const r of seatRowsByCategory(rows)) {
+        if (!seen.has(r.category)) { seen.add(r.category); categories.push(r.category); }
+      }
+    }
+    const header = categories.map(cat => `<th colspan="2">${escapeHtml(cat)}</th>`).join("");
+    const sub = categories.map(() => "<th>G</th><th>L</th>").join("");
+    const body = entries.map(([alloc, rows]) => {
+      const map = new Map(rows.map(r => [r.category, r]));
+      const split = alloc === "State Level" || alloc === "HU" || alloc === "OHU";
+      const cells = categories.map(cat => {
+        const r = map.get(cat) || {};
+        if (split) {
+          const hasGL = r.G != null || r.L != null;
+          if (hasGL) return `<td>${r.G ?? "—"}</td><td>${r.L ?? "—"}</td>`;
+          // The source row has no G/L split. Show the value we actually
+          // have across the pair instead of misleading dashes.
+          return `<td colspan="2">${r.total ?? "—"}</td>`;
+        }
+        return `<td colspan="2">${r.total ?? "—"}</td>`;
+      }).join("");
+      // PWD/DEF lane totals are not the same as the PDF's separate common
+      // reserved-seat counts; those values are shown in the course metadata
+      // block above. Never relabel a lane total as a common-seat value.
+      return `<tr><th class="seat-pdf-rowlabel">${escapeHtml(SEAT_ALLOC_LABEL[alloc] || alloc)}</th>${cells}</tr>`;
+    }).join("");
+    return `
+      <div class="seat-pdf-table-wrap">
+        <table class="seat-pdf-table">
+          <thead>
+            <tr><th class="seat-pdf-rowlabel">Category</th>${header}</tr>
+            <tr><th class="seat-pdf-rowlabel">General / Ladies</th>${sub}</tr>
+          </thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function seatMatrixChoiceHtml(course, code, allocs, collegeName, choiceCount, metadata) {
+    return `
+      <section class="seat-pdf-card">
+        ${seatPdfHeaderHtml(collegeName, course, code, choiceCount, metadata)}
+        ${seatMatrixTableHtml(allocs)}
+      </section>`;
+  }
+
+  async function renderSeatMatrix() {
+    els.seatMatrixBody.innerHTML = `<p class="d-text">Loading seat matrix…</p>`;
+    if (!state.course || !state.college) {
+      els.seatMatrixBody.innerHTML = `<p class="d-text">Seat matrix isn't available until a course and college are loaded.</p>`;
+      return;
+    }
+    try {
+      const seatPayload = await loadSeats(state.course, state.college);
+      const instData = seatPayload && seatPayload.data ? seatPayload.data : {};
+      const courseMetadata = seatPayload && seatPayload.course_metadata ? seatPayload.course_metadata : {};
+      if (!instData || !Object.keys(instData).length) {
+        els.seatMatrixBody.innerHTML = `<p class="d-text">No seat matrix on file for this college.</p>`;
+        return;
+      }
+      let branchSelectorHtml = '';
+      if (isEngineeringCourse() && state.selectedYear) {
+        const yearPayload = await loadCollegeYear(state.course, state.college, state.selectedYear);
+        const allRows = Array.isArray(yearPayload.pdf_rows) ? yearPayload.pdf_rows : [];
+        const labels = { ...(yearPayload.branches || {}) };
+        const codeByBranch = new Map();
+        allRows.forEach(r => {
+          const id = String(r.branch);
+          const code = String(r.program_code || '');
+          if (code && !codeByBranch.has(id)) codeByBranch.set(id, code);
+        });
+        for (const [code, meta] of Object.entries(courseMetadata)) {
+          if (![...codeByBranch.values()].includes(String(code))) {
+            const id = `@choice:${code}`;
+            codeByBranch.set(id, String(code));
+            labels[id] = `${meta.course_name || 'Engineering branch'} · cutoff unavailable`;
+          }
+        }
+        const branchIds = [...new Set([...allRows.map(r => String(r.branch)), ...[...codeByBranch.keys()].filter(id => id.startsWith('@choice:'))])]
+          .sort((a,b) => (codeByBranch.get(a) || a).localeCompare(codeByBranch.get(b) || b));
+        if (!branchIds.includes(String(selectedDrawerProgram))) selectedDrawerProgram = branchIds[0] || null;
+        const selectedRow = allRows.find(r => String(r.branch) === String(selectedDrawerProgram) && r.program_code)
+          || allRows.find(r => String(r.branch) === String(selectedDrawerProgram));
+        state.selectedProgramCode = selectedRow ? String(selectedRow.program_code || '') : (codeByBranch.get(String(selectedDrawerProgram)) || '');
+        const branchIndex = branchIds.indexOf(String(selectedDrawerProgram));
+        if (branchIds.length > 1) {
+          branchSelectorHtml = `
+            <div class="engineering-branch-selector" aria-label="Engineering branch selector">
+              <button type="button" class="engineering-branch-arrow" data-branch-prev aria-label="Previous branch" ${branchIndex <= 0 ? 'disabled' : ''}>←</button>
+              <div class="engineering-branch-current"><span>Branch ${branchIndex + 1} of ${branchIds.length}</span><strong>${escapeHtml(labels[String(selectedDrawerProgram)] || 'Select branch')}</strong></div>
+              <button type="button" class="engineering-branch-arrow" data-branch-next aria-label="Next branch" ${branchIndex >= branchIds.length - 1 ? 'disabled' : ''}>→</button>
+            </div>`;
+        }
+      }
+      const allChoiceCodes = Object.keys(instData);
+      const choiceCodes = isEngineeringCourse()
+        ? (state.selectedProgramCode ? allChoiceCodes.filter(code => String(code) === String(state.selectedProgramCode)) : [])
+        : allChoiceCodes;
+      const collegeMeta = (CONFIG.colleges || []).find(x => x.course === state.course && String(x.institution_code) === String(state.college));
+      const collegeName = collegeMeta ? collegeMeta.name : state.college;
+      if (!choiceCodes.length) {
+        els.seatMatrixBody.innerHTML = `${branchSelectorHtml}<p class="d-text">Cutoff data is available for this branch, but no matching seat-matrix record was published for choice code ${escapeHtml(state.selectedProgramCode || 'unavailable')}. Seat counts are unavailable; the official cutoff history remains available. Other branches are not shown as a substitute.</p>`;
+        return;
+      }
+      const displayCodes = choiceCodes.filter(code => courseMetadata[String(code)]);
+      const missingMetadataCount = choiceCodes.length - displayCodes.length;
+      const missingMetadataNote = missingMetadataCount
+        ? `<p class="d-text">The official PDF summary metadata is missing for ${missingMetadataCount} selected choice code(s). Those tables are withheld until the source PDF is re-extracted and re-imported; no other branch is used as a substitute.</p>`
+        : "";
+      if (!displayCodes.length) {
+        els.seatMatrixBody.innerHTML = `${branchSelectorHtml}<p class="d-text">The official PDF summary metadata has not been imported for this branch. The seat matrix is withheld rather than showing a partial or potentially misleading table.</p>`;
+        return;
+      }
+      els.seatMatrixBody.innerHTML = `${branchSelectorHtml}${missingMetadataNote}${displayCodes.map(code => seatMatrixChoiceHtml(state.course, code, instData[code], collegeName, displayCodes.length, courseMetadata[String(code)])).join("")}`;
+      els.seatMatrixWrap.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (err) {
+      els.seatMatrixBody.innerHTML = `<p class="d-text">Couldn't load seat matrix: ${escapeHtml(err.message || String(err))}</p>`;
+    }
+  }
+
+  /* ── Wiring ── */
+  function wire() {
+    COURSES.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c; opt.textContent = courseDisplayLabel(c);
+      els.tCourse.appendChild(opt);
+    });
+
+    els.tCourse.addEventListener("change", async () => {
+      state.course = els.tCourse.value || null;
+      state.branch = state.college = state.category = state.quota = null;
+      state.ladies = false; els.tLadies.checked = false;
+      if (els.tBranch) populateSelect(els.tBranch, [], "Select course first");
+      if (els.tCollege) populateSelect(els.tCollege, [], "Select branch first");
+      populateSelect(els.tCategory, [], "Select college first");
+      populateSelect(els.tQuota, [], "Select category first");
+      els.tLadies.disabled = true;
+      if (!state.course) { showEmpty(); return; }
+
+      els.trendsEmpty.style.display = "none";
+      els.trendsTable.style.display = "none";
+      els.trendsInsights.style.display = "none";
+      els.trendsLoading.style.display = "none";
+      showEmpty("<strong>Use the college drawer</strong>Select a college from the results above to view its precomputed cutoff data.");
+    });
+
+    if (els.tBranch) els.tBranch.addEventListener("change", () => {
+      state.branch = els.tBranch.value || null;
+      state.category = state.quota = null;
+      state.college = ids.mode === "drawer" ? state.college : null;
+      if (ids.mode !== "drawer") {
+        rebuildColleges();
+        populateSelect(els.tCategory, [], "Select college first");
+        populateSelect(els.tQuota, [], "Select category first");
+        rebuildLadiesToggle();
+      }
+      showEmpty();
+    });
+
+    els.tCollege.addEventListener("change", () => {
+      state.college = els.tCollege.value || null;
+      state.category = state.quota = null;
+      rebuildLadiesToggle();
+      rebuildCategories();
+      populateSelect(els.tQuota, [], "Select category first");
+      showEmpty();
+    });
+
+    els.tLadies.addEventListener("change", () => {
+      state.ladies = els.tLadies.checked;
+      state.category = state.quota = null;
+      if (ids.mode === "drawer") rebuildDrawerCategories(); else rebuildCategories();
+      populateSelect(els.tQuota, [], "Select category first");
+      showEmpty();
+    });
+
+    els.tCategory.addEventListener("change", () => {
+      state.category = els.tCategory.value || null;
+      state.quota = null;
+      if (ids.mode === "drawer") rebuildDrawerQuotas(); else rebuildQuotas();
+      showEmpty();
+    });
+
+    els.tQuota.addEventListener("change", () => {
+      state.quota = els.tQuota.value || null;
+      if (state.quota) {
+        renderCurrentGroup();
+      } else showEmpty();
+    });
+  }
+
+  function init() {
+    bindEls();
+    wire();
+    /* Same searchable-dropdown component as City/Course above, so
+       every place a person picks from a list — City, Course, Branch,
+       Category, Quota/Type — looks and behaves identically, with the
+       same fixed panel size and a search box to narrow long lists. */
+    if (els.tBranch) enhanceSelect(els.tBranch, { search: true });
+    enhanceSelect(els.tCategory, { search: true });
+    enhanceSelect(els.tQuota,    { search: true });
+
+    if (ids.mode === "drawer") {
+      [els.trendsTable, els.seatMatrixBody].filter(Boolean).forEach(container => {
+        container.addEventListener("click", event => {
+        const prev = event.target.closest("[data-branch-prev]");
+        const next = event.target.closest("[data-branch-next]");
+        if (!prev && !next) return;
+        event.preventDefault();
+        const key = `${state.course}:${state.selectedYear}:${state.college}`;
+        const cached = collegeYearCache.get(key);
+        if (!cached) return;
+        Promise.all([Promise.resolve(cached), loadSeats(state.course, state.college)]).then(([payload, seatPayload]) => {
+          const rows = Array.isArray(payload.pdf_rows) ? payload.pdf_rows : [];
+          const labels = { ...(payload.branches || {}) };
+          const seatMetadata = seatPayload && seatPayload.course_metadata ? seatPayload.course_metadata : {};
+          const codeByBranch = new Map();
+          rows.forEach(r => {
+            const id = String(r.branch);
+            const code = String(r.program_code || '');
+            if (code && !codeByBranch.has(id)) codeByBranch.set(id, code);
+          });
+          for (const [code, meta] of Object.entries(seatMetadata)) {
+            if (![...codeByBranch.values()].includes(String(code))) {
+              const id = `@choice:${code}`;
+              codeByBranch.set(id, String(code));
+              labels[id] = `${meta.course_name || 'Engineering branch'} · cutoff unavailable`;
+            }
+          }
+          const branchIds = [...new Set([...rows.map(r => String(r.branch)), ...[...codeByBranch.keys()].filter(id => id.startsWith('@choice:'))])]
+            .sort((a,b) => (codeByBranch.get(a) || a).localeCompare(codeByBranch.get(b) || b));
+          const index = branchIds.indexOf(String(selectedDrawerProgram));
+          const target = Math.max(0, Math.min(branchIds.length - 1, index + (next ? 1 : -1)));
+          selectedDrawerProgram = branchIds[target] || selectedDrawerProgram;
+          renderDrawerAllData();
+          if (els.seatMatrixWrap && els.seatMatrixWrap.style.display !== "none") renderSeatMatrix();
+        }).catch(err => console.error("Could not change engineering branch:", err));
+        });
+      });
+    }
+
+    /* Seat Matrix toggle — independent of the category/quota picked
+       above; shows/hides its own table and loads the data on first
+       open (cached after that, see loadSeats()). */
+    if (els.seatMatrixBtn) {
+      els.seatMatrixBtn.addEventListener("click", () => {
+        const showing = els.seatMatrixWrap.style.display !== "none";
+        els.seatMatrixWrap.style.display = showing ? "none" : "block";
+        els.seatMatrixBtn.classList.toggle("active", !showing);
+        if (!showing) renderSeatMatrix();
+      });
+    }
+  }
+
+  /* ── lockToCollege(course, collegeCode) ──
+     Drawer-only entry point: course + college are already known from Step 01.
+     The selected college's compact metadata is available immediately; raw
+     cutoff data is loaded lazily one college+year API request at a time. Category and
+     quota are highlights, not filters of the displayed PDF-style data. ── */
+  async function lockToCollege(course, collegeCode) {
+    state.course = course;
+    state.branch = null;
+    state.college = collegeCode;
+    state.ladies = false;
+    state.category = state.quota = null;
+    state.selectedYear = null;
+    state.selectedProgramCode = '';
+    selectedDrawerProgram = null;
+    els.tCourse.innerHTML = `<option value="${course}" selected>${course}</option>`;
+    els.tCollege.innerHTML = `<option value="${collegeCode}" selected>${collegeCode}</option>`;
+
+    /* Critical fast path: category/quota options come from the compact
+       metadata returned by the college-specific trend-options API. Do NOT
+       wait for raw cutoff rows before populating these controls. */
+    els.trendsEmpty.style.display = "none";
+    els.trendsTable.style.display = "none";
+    els.trendsLoading.style.display = "flex";
+    state.drawerOptions = null;
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/colleges/` + encodeURIComponent(collegeCode) +
+        "/trend-options?course=" + encodeURIComponent(course),
+        { headers: { "Accept": "application/json" } }
+      );
+      if (!response.ok) throw new Error("Could not load college trend options");
+      const payload = await response.json();
+      const raw = payload.options || {};
+      const years = [...new Set([
+        ...(raw["0"]?.years || []),
+        ...(raw["1"]?.years || [])
+      ])].map(Number).filter(Number.isFinite).sort((a,b)=>a-b);
+      const toLegacy = value => (value.categories || []).map(item => ({
+        v: item.value,
+        q: item.quotas || []
+      }));
+      state.drawerOptions = {
+        y: years,
+        c: { "0": toLegacy(raw["0"] || {}), "1": toLegacy(raw["1"] || {}) }
+      };
+      rebuildLadiesToggleFromMeta();
+      rebuildDrawerCategories();
+      populateSelect(els.tQuota, [], "Select category first");
+      els.trendsLoading.style.display = "none";
+      showEmpty("<strong>Pick a category and quota/type</strong>The full cutoff tables for this college will be loaded; your selection is highlighted.");
+      if (years.length) {
+        state.selectedYear = years[years.length - 1];
+        loadCollegeYear(course, collegeCode, state.selectedYear)
+          .catch(err => console.warn("Cutoff prefetch failed:", err));
+      }
+    } catch (err) {
+      els.trendsLoading.style.display = "none";
+      showEmpty("<strong>Couldn't load trend options</strong>" + escapeHtml(err.message || String(err)));
+    }
+    return { ok: true, branchCount: 0 };
+  }
+
+  function rebuildLadiesToggleFromMeta() {
+    const meta = drawerMeta();
+    const hasLadies = !!(meta && meta.c && meta.c["1"] && meta.c["1"].length);
+    els.tLadies.disabled = !hasLadies;
+    els.tLadies.checked = false;
+    state.ladies = false;
+  }
+
+  /* ── destroy() ──
+     Called right before a drawer instance is discarded (the drawer
+     re-renders its whole innerHTML on every open, which already
+     detaches these DOM nodes). Kept as a no-op hook for symmetry with
+     init() / lockToCollege() — nothing here currently needs explicit
+     teardown since the table/seat-matrix views don't hold external
+     resources the way the old Chart.js canvas did. */
+  function destroy() {}
+
+  return { init, lockToCollege, destroy };
+}
+
+
+/* ── One drawer-scoped instance per college slide. Re-created (and the
+   previous one destroyed) every time a college drawer opens — see
+   showDrawer(). ── */
+let drawerTrends = null;
+
+/* ── BOOT: runs once when the page loads ── */
+(function init() {
+  applyBranding();                          /* set document <title> */
+  populateSelects();                        /* fill the City + Course dropdowns, unselected */
+
+  currentPct = null;                        /* no percentile pre-filled — the person must type their own */
+
+  renderResults();                          /* build the initial "search to see colleges" prompt */
+  loadRealCollegeData();                    /* fetch the real data, then re-render */
+  loadHeroStats();                           /* populate hero totals from PostgreSQL */
+  enhanceSelect(citySelect,   { search: true });
+  enhanceSelect(courseSelect, { search: true });
+
+  /* Start watching .reveal elements + hero stat numbers */
+  document.querySelectorAll(".reveal").forEach(el => revealObserver.observe(el));
+  document.querySelectorAll(".hero-stat-num").forEach(el => counterObserver.observe(el));
+
+  const feedbackModal=document.getElementById("feedbackModal"),feedbackOpen=document.getElementById("feedbackOpen"),feedbackClose=document.getElementById("feedbackClose"),feedbackCancel=document.getElementById("feedbackCancel"),feedbackMessage=document.getElementById("feedbackMessage"),feedbackStatus=document.getElementById("feedbackStatus"),feedbackSubmit=document.getElementById("feedbackSubmit"),feedbackRating=document.getElementById("feedbackRating"),feedbackWebsite=document.getElementById("feedbackWebsite");
+  let feedbackScore=null;
+  function closeFeedback(){feedbackModal.classList.remove("open");feedbackModal.setAttribute("aria-hidden","true");}
+  feedbackOpen.addEventListener("click",()=>{feedbackModal.classList.add("open");feedbackModal.setAttribute("aria-hidden","false");feedbackStatus.textContent="";setTimeout(()=>feedbackMessage.focus(),0)});
+  feedbackClose.addEventListener("click",closeFeedback);feedbackCancel.addEventListener("click",closeFeedback);
+  feedbackModal.addEventListener("click",e=>{if(e.target===feedbackModal)closeFeedback()});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&feedbackModal.classList.contains("open"))closeFeedback()});
+  feedbackRating.querySelectorAll("button").forEach(btn=>btn.addEventListener("click",()=>{feedbackScore=Number(btn.dataset.rating);feedbackRating.querySelectorAll("button").forEach(b=>b.classList.toggle("selected",b===btn));}));
+  feedbackSubmit.addEventListener("click",async()=>{const message=feedbackMessage.value.trim();if(!message){feedbackStatus.textContent="Please write some feedback first.";feedbackMessage.focus();return}feedbackSubmit.disabled=true;feedbackStatus.textContent="Sending…";try{const response=await fetch(`${API_BASE}/api/feedback`,{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({rating:feedbackScore,message,page:location.pathname,website:feedbackWebsite.value})});let data={};try{data=await response.json()}catch{}if(!response.ok)throw new Error(data.detail||"Couldn’t send feedback.");feedbackStatus.textContent="Thanks — your feedback was sent.";feedbackMessage.value="";feedbackScore=null;feedbackRating.querySelectorAll("button").forEach(b=>b.classList.remove("selected"));setTimeout(closeFeedback,1100)}catch(err){feedbackStatus.textContent=err.message||"Couldn’t send feedback. Please try again."}finally{feedbackSubmit.disabled=false}});
+})();
+</script>
+
+</body>
+</html>

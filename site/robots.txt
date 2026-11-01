@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /preview/
+Disallow: /data/
+Disallow: /data/courses/
+Disallow: /data/search_index.js
+Sitemap: https://cetfind.onrender.com/sitemap.xml
