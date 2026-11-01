@@ -1,0 +1,8 @@
+services:
+  backend:
+    env_file:
+      - .env.docker-local
+    environment:
+      CET_ENV: development
+      CET_ADMIN_COOKIE_SECURE: "0"
+      CET_PDF_STORAGE_BACKEND: local

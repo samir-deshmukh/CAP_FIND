@@ -1,0 +1,19 @@
+pandas==2.2.3
+pdfplumber==0.11.10
+pdfminer.six==20260107
+SQLAlchemy==2.0.36
+psycopg2-binary==2.9.10
+
+requests>=2.32,<3
+fastapi==0.141.1
+uvicorn[standard]==0.34.0
+python-multipart==0.0.32
+itsdangerous==2.2.0
+pytesseract==0.3.13
+Pillow==12.3.0
+PyMuPDF==1.25.3
+pypdfium2==5.13.0
+
+
+# S3-compatible private object storage for durable PDF uploads
+boto3>=1.35,<2.0

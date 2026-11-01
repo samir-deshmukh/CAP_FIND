@@ -1,0 +1,48 @@
+# Data / generated runtime artifacts
+data/raw/
+data/processed/
+backend/runtime_data/
+site/data/*.json
+site/data/*.csv
+db/*.db
+db/*.db-journal
+db/*.db-wal
+db/*.db-shm
+
+# Secrets / credentials — never commit these
+.env
+.env.*
+!.env.example
+!.env.*.example
+.streamlit/secrets.toml
+*.secret
+*.secrets
+*.credentials
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Machine-local CAPFind extraction worker state (source PDFs and generated artifacts must not be committed)
+.venv-local-worker/
+data/local_worker/
+data/local_import_artifacts/
+local_extraction/input/
+local_extraction/output/
+local_extraction/ready_to_upload/
+local_extraction/reports/
