@@ -858,9 +858,6 @@ def get_college_details(
 
     Connections: The college drawer calls this endpoint; it queries PostgreSQL rows scoped to the requested institution rather than sending the full dataset.
     """
-    """Fetches cutoff trends and category breakdowns for a specific college drawer.
-    Returns only data relevant to the single institution requested.
-    """
     check_rate_limit(request)
     engine = get_active_engine()
     if not _db_available(engine):
