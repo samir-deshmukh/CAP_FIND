@@ -67,7 +67,7 @@ def _engineering_cutoff_seat_coverage(conn) -> dict[str, int]:
 def refresh(engine, course_family: str | None = None) -> None:
     """Rebuild the PostgreSQL summary tables used by public search, college trends and seat details.
 
-    Connections: The CET Data Calculator calls this script after a successful source-data publication; it refreshes derived tables and validates coverage before the rebuild is treated as complete.
+    Connections: The CET Data Calculator's build endpoint runs this script when an administrator requests a rebuild; it refreshes derived tables and validates coverage before the build is marked complete.
     """
 
     course_where = " AND p.program_family = :course" if course_family else ""
