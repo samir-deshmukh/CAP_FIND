@@ -20,13 +20,31 @@ STAGING_ROOT = BASE / "data" / "import_staging"
 class ImportCancelled(Exception):
     pass
 
+# ----------------------------------------------------------------------
+# Job cancellation controls and validator helpers
+# ----------------------------------------------------------------------
 def _cancel_marker(job_id: int) -> Path:
+    """Return the fixed pause/cancel marker path for one import job.
+
+    Connections: Admin control routes and the worker use this path to signal a safe stop without accepting a user-supplied filesystem path.
+    """
+
     return STAGING_ROOT / f"job_{job_id}" / "CANCEL"
 
 def _cancel_requested(job_id: int) -> bool:
+    """Check whether a cancellation marker exists for the given job.
+
+    Connections: The import and CSV staging loops call this between safe processing checkpoints.
+    """
+
     return _cancel_marker(job_id).exists()
 
 def _raise_if_cancelled(conn, job_id: int) -> None:
+    """Check durable job state and the cancellation marker, then stop work when cancellation was requested.
+
+    Connections: Long-running import stages call this helper so the worker records a clear cancellation event before exiting.
+    """
+
     row = conn.execute('SELECT status FROM import_jobs WHERE id=?', (job_id,)).fetchone()
     if not _cancel_requested(job_id) and (not row or row.get('status') != JobStatus.CANCELLED.value):
         return
@@ -40,6 +58,11 @@ def _raise_if_cancelled(conn, job_id: int) -> None:
     raise ImportCancelled()
 
 def _load_module(path: Path, name: str):
+    """Load a Python helper module from a known script path.
+
+    Connections: The validation runner uses this to load project scripts without changing the current working directory.
+    """
+
     spec = importlib.util.spec_from_file_location(name, path)
     if not spec or not spec.loader:
         raise RuntimeError(f"Cannot load extractor: {path.name}")
@@ -48,6 +71,11 @@ def _load_module(path: Path, name: str):
     return mod
 
 def _run_validator(script: Path, folder: Path) -> tuple[bool, str]:
+    """Run a validation script in a controlled subprocess and return its result.
+
+    Connections: process_import() uses this after extraction/normalization before staging records for review.
+    """
+
     env = os.environ.copy()
     # Validation scripts emit Unicode audit markers. Force UTF-8 so the same
     # subprocess behaves identically on Windows development machines and
@@ -62,24 +90,36 @@ def _run_validator(script: Path, folder: Path) -> tuple[bool, str]:
     return p.returncode == 0, output
 
 def _canonical_cutoff_name(family: str, year: int, round_name: str) -> str:
+    """Build the expected canonical filename for one course/year/round cutoff CSV.
+
+    Connections: The import pipeline uses this name when saving and validating extracted cutoff output.
+    """
+
     return f"{family}_{str(year)[-2:]}_{round_name}_cutoffs.csv"
 
 def _canonical_seat_name(family: str) -> str:
+    """Build the expected canonical filename for a course seat-matrix CSV.
+
+    Connections: The import pipeline uses this name when saving and validating extracted seat output.
+    """
+
     return f"{family}_SM.csv"
 
 def _page_from(row: dict):
+    """Read the source PDF page number from a normalized row when it is available.
+
+    Connections: Staging and release records use this value to preserve source provenance.
+    """
+
     v = str(row.get("page", "")).strip()
     return int(v) if v.isdigit() else None
 
 def _resolve_cutoff_dimensions(raw: dict):
-    """Resolve cutoff category/section/stage without inventing source context.
+    """Resolve category, section and stage values from one raw cutoff record.
 
-    The trusted validator deliberately accepts a blank section (the category
-    suffix already encodes H/O/S) and maps a blank stage to the explicit
-    canonical value Unknown. The import path must use the same semantics;
-    otherwise a historically clean PDF can be quarantined merely because a
-    table's merged/visually inherited cell is blank in the CSV.
+    Connections: The cutoff insert helper uses this to normalize source fields without inventing missing context.
     """
+
     from scripts.category_codes import is_category_code
     from scripts.validate_data import SECTION_MAP, STAGE_MAP, parse_category
 
@@ -109,7 +149,11 @@ def _resolve_cutoff_dimensions(raw: dict):
     return base, ladies, section, stage
 
 def _csv_control_checkpoint(conn, job_id: int) -> None:
-    """Honor stop/pause controls while a large CSV is being staged."""
+    """Honor pause and cancel requests between safe CSV staging checkpoints.
+
+    Connections: The staging loop calls this while processing large files so the worker can stop without losing an in-progress batch.
+    """
+
     import time
     pause_marker = STAGING_ROOT / f"job_{job_id}" / "PAUSE"
     while pause_marker.exists():
@@ -118,9 +162,17 @@ def _csv_control_checkpoint(conn, job_id: int) -> None:
     _raise_if_cancelled(conn, job_id)
 
 
+# ----------------------------------------------------------------------
+# Bounded CSV staging and import-result metadata
+# ----------------------------------------------------------------------
 def _stage_csv(conn, job_id: int, result_type: str, path: Path,
                valid: bool, validation_message: str, required_fields=(),
                progress_callback=None, expected_rows: int | None = None) -> tuple[int, int]:
+    """Read a validated CSV in bounded batches and write its rows to import staging.
+
+    Connections: process_import() calls this after validation; it records staging data only and does not update production fact tables.
+    """
+
     rows = 0
     quarantined = 0
     total_rows = 0
@@ -163,6 +215,11 @@ def _stage_csv(conn, job_id: int, result_type: str, path: Path,
     batch = []
 
     def flush_batch():
+        """Write the current batch of normalized rows to the staging table, then clear the in-memory batch.
+
+        Connections: The nested CSV staging loop calls this at its row limit and at end-of-file to keep memory bounded.
+        """
+
         if not batch:
             return
         values_per_row = 8
@@ -260,6 +317,11 @@ def _stage_csv(conn, job_id: int, result_type: str, path: Path,
 
 def _insert_result(conn, job_id, result_type, raw_path, normalized_path,
                    valid, extracted, staged, quarantined, summary):
+    """Record the source and normalized artifact paths plus validation outcome for an import job.
+
+    Connections: process_import() uses this result record so Review Center can inspect the files and their validation state.
+    """
+
     conn.execute(
         """INSERT INTO import_results
            (job_id,result_type,raw_artifact_path,normalized_artifact_path,
@@ -274,7 +336,15 @@ def _insert_result(conn, job_id, result_type, raw_path, normalized_path,
     )
 
 
+# ----------------------------------------------------------------------
+# Staged-data comparison before review
+# ----------------------------------------------------------------------
 def _compare_cutoffs(conn, path: Path, family: str, year: int, round_name: str) -> dict:
+    """Compare incoming cutoff rows with existing production cutoff data and summarize conflicts or changes.
+
+    Connections: process_import() uses the comparison before marking an import ready for review.
+    """
+
     existing = set()
     q = conn.execute("""SELECT c.institution_code,p.program_name_raw,c.base_category,
                                c.is_ladies,c.section_code,c.stage_code,c.rank_number,c.rank_suffix,c.percentile
@@ -342,6 +412,11 @@ def _compare_cutoffs(conn, path: Path, family: str, year: int, round_name: str) 
             "changed_examples": changed_examples}
 
 def _compare_seats(conn, path: Path, family: str, year: int) -> dict:
+    """Compare incoming seat rows with existing seat-matrix data and report differences.
+
+    Connections: process_import() uses this check before staging is offered for approval.
+    """
+
     from scripts.ingest_seats import load_whitelists
     valid_cats, lane_map, alias_map = load_whitelists(BASE / "data" / "reference")
     existing = set(tuple(r) for r in conn.execute(
@@ -366,7 +441,11 @@ def process_import(conn, job_id: int, pdf_path: Path, *,
                    claimed: bool=False, pre_extracted_path: Path | None=None,
                    extraction_summary: dict | None=None, source_filename: str | None=None, worker_id: str | None=None,
                    progress_callback=None):
-    """Run extraction/normalization/validation and stop at STAGED/REVIEW_REQUIRED."""
+    """Run extraction, normalization, validation and staging for one import job.
+
+    Connections: The background worker in backend.main calls this; it stops at STAGED or REVIEW_REQUIRED and never publishes production data.
+    """
+
     # Stable per-job work path lets the chunk manifest skip completed parts on retry.
     work = WORK_ROOT / f"job_{job_id}"
     raw = work / "raw"
@@ -640,7 +719,15 @@ def process_import(conn, job_id: int, pdf_path: Path, *,
         return {"ok": False, "job_id": job_id, "status": JobStatus.FAILED.value, "error": str(exc)}
 
 
+# ----------------------------------------------------------------------
+# Review, approval and release-ledger helpers
+# ----------------------------------------------------------------------
 def _load_staged_rows(conn, job_id: int, result_type: str):
+    """Load the staged JSON records for one import result type.
+
+    Connections: Approval and release helpers use these rows to validate and promote only the selected import.
+    """
+
     rows = conn.execute(
         "SELECT id, COALESCE(normalized_json,raw_json) AS normalized_json, validation_status FROM import_staging_records "
         "WHERE job_id=? AND result_type=? ORDER BY id", (job_id, result_type)
@@ -649,7 +736,11 @@ def _load_staged_rows(conn, job_id: int, result_type: str):
 
 
 def _iter_staged_rows(conn, job_id: int, result_type: str, batch_size: int = 200):
-    """Yield staged rows in keyset batches instead of retaining an import in RAM."""
+    """Yield staged rows in bounded keyset batches instead of loading an entire import into memory.
+
+    Connections: Approval and comparison helpers use this iterator when processing large staged imports.
+    """
+
     batch_size = max(1, int(batch_size))
     last_id = 0
     while True:
@@ -668,7 +759,11 @@ def _iter_staged_rows(conn, job_id: int, result_type: str, batch_size: int = 200
 
 def _iter_release_items(conn, release_id: int, *, newest_first: bool = False,
                         batch_size: int = 500):
-    """Page rollback ledger rows so a large release does not load its ledger into RAM."""
+    """Yield release-ledger rows in bounded keyset batches.
+
+    Connections: Rollback and permanent release cleanup use this iterator so a large release ledger is not loaded into memory at once.
+    """
+
     batch_size = max(1, int(batch_size))
     last_id = 9223372036854775807 if newest_first else 0
     while True:
@@ -689,6 +784,11 @@ def _iter_release_items(conn, release_id: int, *, newest_first: bool = False,
 
 
 def _require_clean_stage(conn, job_id: int, result_type: str):
+    """Reject approval when the selected staged result has validation errors or unresolved findings.
+
+    Connections: approve_import() calls this before opening the production-row promotion transaction.
+    """
+
     result = conn.execute(
         "SELECT * FROM import_results WHERE job_id=? AND result_type=? ORDER BY id DESC LIMIT 1",
         (job_id, result_type)
@@ -709,13 +809,11 @@ def _require_clean_stage(conn, job_id: int, result_type: str):
 
 
 def revalidate_legacy_mh_staging(conn, job_id: int, actor_user_id: int):
-    """Repair only the known legacy BCA 2026 CAP-2 MH validator mismatch.
+    """Recheck the narrowly identified legacy BCA 2026 CAP-2 MH staging mismatch.
 
-    The source PDF can be unavailable on ephemeral hosting, so this path
-    revalidates the already-staged rows against current canonical rules. It is
-    intentionally restricted to one known filename and the exact historical
-    validator signature; it never commits production data.
+    Connections: The protected review endpoint calls this compatibility repair; it does not bypass the normal approval gate.
     """
+
     import re
     import csv
 
@@ -820,7 +918,11 @@ def revalidate_legacy_mh_staging(conn, job_id: int, actor_user_id: int):
 
 @lru_cache(maxsize=1)
 def _cutoff_program_levels():
-    """Read program aliases once; never rebuild a pandas DataFrame per row."""
+    """Load and cache program-level reference mappings used during cutoff normalization.
+
+    Connections: The cutoff insert helper reuses this lookup so it does not rebuild reference data for every row.
+    """
+
     path = BASE / "data" / "reference" / "program_aliases.csv"
     if not path.exists():
         return {}
@@ -832,12 +934,25 @@ def _cutoff_program_levels():
 
 
 @lru_cache(maxsize=1)
+# ----------------------------------------------------------------------
+# Normalize staged records into production facts
+# ----------------------------------------------------------------------
 def _seat_import_whitelists():
+    """Load the canonical seat-matrix validation whitelists.
+
+    Connections: _insert_seat_from_json() uses these reference sets to prevent unknown allocation/category values from entering production.
+    """
+
     from scripts.validate_seats import load_whitelists
     return load_whitelists(BASE / "data" / "reference")
 
 
 def _insert_cutoff_from_json(conn, raw, job, source_pdf, reference_cache=None):
+    """Convert one staged cutoff record into normalized PostgreSQL reference and fact rows.
+
+    Connections: approve_import() calls this for each accepted staged cutoff row while building the release ledger.
+    """
+
     import sys
     sys.path.insert(0, str(SCRIPTS))
     from validate_data import parse_filename
@@ -904,6 +1019,11 @@ def _insert_cutoff_from_json(conn, raw, job, source_pdf, reference_cache=None):
 
 
 def _insert_seat_from_json(conn, raw, job, source_pdf, reference_cache=None):
+    """Convert one staged seat record into normalized PostgreSQL seat rows.
+
+    Connections: approve_import() calls this for accepted seat rows and records the inserted data against the release.
+    """
+
     from scripts.ingest_seats import canonical_institution_code
     from scripts.validate_seats import normalize_category, TOTAL_MARKER
     reference_cache = reference_cache if reference_cache is not None else {
@@ -970,7 +1090,11 @@ def _insert_seat_from_json(conn, raw, job, source_pdf, reference_cache=None):
 
 
 def _insert_seat_course_metadata(conn, raw, job, source_pdf):
-    """Persist one official course/choice-code summary from the source PDF."""
+    """Persist one official course/choice-code summary from the source PDF.
+
+    Connections: The seat approval path stores this metadata so the public seat endpoint can preserve source labels and page provenance.
+    """
+
     metadata = raw.get("course_metadata")
     if not metadata:
         return False
@@ -1002,7 +1126,11 @@ def _insert_seat_course_metadata(conn, raw, job, source_pdf):
 
 def _write_commit_progress(job_id: int, status: str, stage: str,
                            processed: int, total: int, message: str) -> None:
-    """Persist progress outside the production-row transaction so polling can see it live."""
+    """Upsert commit status and row counts in the separate progress table.
+
+    Connections: The approval worker writes here while the Live Processing page polls progress outside the production transaction.
+    """
+
     total = max(0, int(total))
     processed = max(0, min(int(processed), total)) if total else 0
     progress = 100 if status == "COMPLETED" else (min(99, int(processed * 100 / total)) if total else 0)
@@ -1022,12 +1150,20 @@ def _write_commit_progress(job_id: int, status: str, stage: str,
 
 
 def _rollback_metadata(after: dict) -> dict:
-    """Project a fact row to the only fields rollback needs for reference cleanup."""
+    """Project a production fact row to the fields needed for rollback reference cleanup.
+
+    Connections: The release-ledger writer stores this compact metadata so rollback can remove only related reference rows.
+    """
+
     return {key: after[key] for key in ("institution_code", "program_id") if key in after}
 
 
 def _insert_release_items_batched(conn, release_id: int, inserted: list[tuple], batch_size: int = 500) -> None:
-    """Write release history in bounded batches without changing its contents."""
+    """Write release-ledger entries in bounded batches without changing their recorded contents.
+
+    Connections: approve_import() calls this inside the promotion transaction to make later rollback release-scoped.
+    """
+
     for start in range(0, len(inserted), batch_size):
         batch = inserted[start:start + batch_size]
         payload = json.dumps([
@@ -1058,8 +1194,15 @@ def _insert_release_items_batched(conn, release_id: int, inserted: list[tuple], 
         # single-insert lastrowid behavior; drain the rest of this bounded batch.
         result.fetchall()
 
+# ----------------------------------------------------------------------
+# Atomic release promotion, purge and rollback
+# ----------------------------------------------------------------------
 def approve_import(conn, job_id: int, actor_user_id: int, notes: str = ""):
-    """Atomically promote a clean staged import into production and create a release."""
+    """Atomically promote a clean staged import into production and create its release record.
+
+    Connections: backend.main.approve() calls this in a worker thread after an explicit reviewer decision.
+    """
+
     job=conn.execute("SELECT * FROM import_jobs WHERE id=?",(job_id,)).fetchone()
     if not job: raise ValueError("Import not found")
     if job["status"] not in {JobStatus.STAGED.value, JobStatus.REVIEW_REQUIRED.value}:
@@ -1168,7 +1311,11 @@ def approve_import(conn, job_id: int, actor_user_id: int, notes: str = ""):
 
 
 def purge_rolled_back_release(conn, release_id: int, actor_user_id: int):
-    """Permanently remove a rolled-back release and its source import artifacts."""
+    """Permanently remove a release that has already been rolled back, including its retained source artifacts.
+
+    Connections: backend.main.delete_rolled_back_release() calls this after checking the release state and authorization.
+    """
+
     release=conn.execute("SELECT * FROM data_releases WHERE id=?",(release_id,)).fetchone()
     if not release: raise ValueError("Release not found")
     if release["status"] != "ROLLED_BACK":
@@ -1224,6 +1371,11 @@ def purge_rolled_back_release(conn, release_id: int, actor_user_id: int):
 
 
 def rollback_release(conn, release_id: int, actor_user_id: int, reason: str):
+    """Reverse the production changes recorded for one release and update its rollback state.
+
+    Connections: backend.main.rollback() calls this after authorization; the release ledger scopes the rollback to that release.
+    """
+
     release=conn.execute("SELECT * FROM data_releases WHERE id=?",(release_id,)).fetchone()
     if not release: raise ValueError("Release not found")
     if release["status"] == "ROLLED_BACK": raise ValueError("Release is already rolled back")
