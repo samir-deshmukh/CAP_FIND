@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -30,6 +31,8 @@ from backend.admin.pipeline import (
 )
 from scripts.cutoff_extractor import process_single_pdf as extract_cutoffs
 from scripts.seat_matrix_extractor import process_single_pdf as extract_seats
+
+log = logging.getLogger(__name__)
 
 BASE = Path(__file__).resolve().parents[1]
 DATA = BASE / "data" / "local_worker"
