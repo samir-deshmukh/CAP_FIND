@@ -15,9 +15,9 @@ from db_bootstrap import bootstrap_schema, engine_for  # noqa: E402
 # Reference-table seeding and institute-name reconciliation
 # ----------------------------------------------------------------------
 def seed_base_categories(conn, ref_dir: Path) -> int:
-    """Insert or update the canonical category codes and their display labels.
+    """Upsert the canonical category codes and descriptions from the reference CSV.
 
-    Connections: main() calls this using data/reference/category_whitelist.csv before cutoff rows are ingested.
+    Connections: main() calls this inside one database transaction before cutoff ingestion.
     """
 
     df = pd.read_csv(ref_dir / 'category_whitelist.csv', dtype=str, keep_default_na=False)
@@ -31,9 +31,9 @@ def seed_base_categories(conn, ref_dir: Path) -> int:
 
 
 def seed_sections(conn, ref_dir: Path) -> int:
-    """Insert or update the canonical CAP section codes and labels.
+    """Upsert the canonical CAP section codes and descriptions.
 
-    Connections: main() calls this using data/reference/section_whitelist.csv so ingestion can map source section names to database codes.
+    Connections: main() calls this so cutoff rows can reference valid section codes.
     """
 
     df = pd.read_csv(ref_dir / 'section_whitelist.csv', dtype=str, keep_default_na=False)
@@ -45,9 +45,9 @@ def seed_sections(conn, ref_dir: Path) -> int:
 
 
 def seed_stages(conn, ref_dir: Path) -> int:
-    """Insert the canonical stage codes without overwriting existing rows.
+    """Insert the canonical stage codes from the stage reference CSV.
 
-    Connections: main() calls this using data/reference/stage_whitelist.csv before cutoff ingestion.
+    Connections: main() calls this before ingestion; existing stage rows are left unchanged.
     """
 
     vals = sorted(set(pd.read_csv(ref_dir / 'stage_whitelist.csv', dtype=str, keep_default_na=False)['canonical']))
@@ -57,9 +57,9 @@ def seed_stages(conn, ref_dir: Path) -> int:
 
 
 def _pick_canonical_name(code: str, by_year: dict[int, Counter]) -> str:
-    """Choose the most frequent institute name from the latest year available for one institute code.
+    """Choose the most common institute name from the latest year, using alphabetical order to break ties.
 
-    Connections: seed_institutes() uses this to select a stable display name while preserving the institute code as identity.
+    Connections: seed_institutes() uses this when historical source PDFs contain multiple name variants for one institute code.
     """
 
     latest_year = max(by_year)
@@ -69,9 +69,9 @@ def _pick_canonical_name(code: str, by_year: dict[int, Counter]) -> str:
 
 
 def seed_institutes(conn, raw_dir: Path) -> tuple[int,int]:
-    """Collect institute names from raw cutoff CSVs and seed one canonical row per institute code.
+    """Build the institute registry from names found in raw cutoff CSVs, grouped by source year.
 
-    Connections: main() calls this after the category, section and stage tables; filenames are parsed by validate_data.parse_filename().
+    Connections: main() calls this after seeding lookup tables; stable institute codes are used to reconcile changing names.
     """
 
     names_by_code: dict[str,dict[int,Counter]] = defaultdict(lambda: defaultdict(Counter))
@@ -94,9 +94,9 @@ def seed_institutes(conn, raw_dir: Path) -> tuple[int,int]:
 
 
 def main():
-    """Bootstrap PostgreSQL and seed the reference and institute tables in one transaction.
+    """Create the schema and seed category, section, stage and institute reference tables.
 
-    Connections: This CLI connects through db_bootstrap.engine_for(), creates the schema through bootstrap_schema(), then calls each seed helper.
+    Connections: The CLI opens one transaction and calls the seed helpers; the application later uses these tables when validating and searching data.
     """
 
     ap=argparse.ArgumentParser(description=__doc__)
