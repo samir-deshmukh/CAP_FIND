@@ -1,3 +1,5 @@
+"""Tests for administrator password hashing, signed sessions and role authorization."""
+
 import os
 
 import pytest
