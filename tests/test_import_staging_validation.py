@@ -1,3 +1,5 @@
+"""Tests for staging validation, source-row storage and rollback-history metadata."""
+
 import csv
 from pathlib import Path
 
