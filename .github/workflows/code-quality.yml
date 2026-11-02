@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -28,5 +30,76 @@ jobs:
           backend/admin/pipeline.py
           backend/admin/state.py
           backend/admin/create_admin.py
+      - name: Syntax-check and run critical lint rules on changed Python files
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          git fetch origin "$BASE_REF" --depth=1
+          mapfile -t python_files < <(git diff --name-only "origin/$BASE_REF...HEAD" -- '*.py' | while IFS= read -r file; do
+            if [ -f "$file" ]; then printf '%s\n' "$file"; fi
+          done)
+          if [ "${#python_files[@]}" -eq 0 ]; then
+            echo "No changed Python files."
+            exit 0
+          fi
+          python -m py_compile "${python_files[@]}"
+          ruff check --select E9,F63,F7,F82 --output-format=github "${python_files[@]}"
       - name: Tests and coverage gate
         run: pytest -q
+
+  frontend-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check inline JavaScript syntax in the public website
+        run: |
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import subprocess
+          import tempfile
+
+          class InlineScripts(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.current = None
+                  self.scripts = []
+
+              def handle_starttag(self, tag, attrs):
+                  if tag.lower() != "script":
+                      return
+                  attributes = dict(attrs)
+                  script_type = attributes.get("type", "").lower()
+                  is_javascript = script_type in ("", "text/javascript", "application/javascript", "module")
+                  if "src" not in attributes and is_javascript:
+                      self.current = []
+
+              def handle_data(self, data):
+                  if self.current is not None:
+                      self.current.append(data)
+
+              def handle_endtag(self, tag):
+                  if tag.lower() == "script" and self.current is not None:
+                      source = "".join(self.current)
+                      if source.strip():
+                          self.scripts.append(source)
+                      self.current = None
+
+          html = Path("site/index.html").read_text(encoding="utf-8")
+          parser = InlineScripts()
+          parser.feed(html)
+          if not parser.scripts:
+              raise SystemExit("No inline JavaScript blocks were found in site/index.html")
+
+          with tempfile.TemporaryDirectory() as directory:
+              for index, source in enumerate(parser.scripts, start=1):
+                  path = Path(directory) / f"inline-{index}.js"
+                  path.write_text(source, encoding="utf-8")
+                  subprocess.run(["node", "--check", str(path)], check=True)
+
+          print(f"JavaScript syntax passed for {len(parser.scripts)} inline script block(s).")
+          PY

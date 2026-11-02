@@ -11,12 +11,25 @@ from validate_data import (REQUIRED_COLUMNS, SECTION_MAP, STAGE_MAP,
 from category_codes import is_category_code  # noqa: E402
 
 
+# ----------------------------------------------------------------------
+# Program mapping and cutoff-row ingestion
+# ----------------------------------------------------------------------
 def load_program_levels(ref_dir: Path):
+    """Load the raw program-name to academic-level mapping from the reference CSV.
+
+    Connections: main() passes this map into ingest_file() so each program row gets its configured level.
+    """
+
     df=pd.read_csv(ref_dir/'program_aliases.csv',dtype=str,keep_default_na=False)
     return dict(zip(df['raw_name'].str.strip(),df['level'].str.strip()))
 
 
 def get_or_create_program(conn, cache, family, name_raw, level_map):
+    """Find or insert one program record and cache its database ID for reuse.
+
+    Connections: ingest_file() calls this for each cutoff row; the returned program_id is used by the cutoffs foreign key.
+    """
+
     key=(family,name_raw)
     if key in cache:return cache[key]
     level=level_map.get(name_raw)
@@ -30,6 +43,11 @@ def get_or_create_program(conn, cache, family, name_raw, level_map):
 
 
 def ingest_file(conn,path,program_cache,level_map):
+    """Validate and insert one cutoff CSV into staging, canonical lookup tables and cutoff facts.
+
+    Connections: main() calls this inside a transaction; malformed rows are recorded in ingest_errors and every source file gets an ingest_log summary.
+    """
+
     meta=parse_filename(path)
     if not meta: raise ValueError(f'{path.name}: invalid cutoffs filename')
     family,year,round_no=meta['family'],meta['year'],meta['round']
@@ -44,6 +62,11 @@ def ingest_file(conn,path,program_cache,level_map):
     for rowno,row in df.iterrows():
         page=int(row['page']) if str(row['page']).strip().isdigit() else None
         def error(reason):
+            """Record why one source cutoff row was skipped, duplicated or failed.
+
+            Connections: The nested helper writes to ingest_errors so the raw row can be investigated without silently discarding it.
+            """
+
             conn.execute(text('''INSERT INTO ingest_errors(source_file,source_page,source_row,raw_category,raw_program,reason)
                 VALUES(:f,:p,:r,:c,:prog,:reason)'''),{'f':path.name,'p':page,'r':int(rowno),'c':row['category'],'prog':row['program_name'],'reason':reason})
         if is_extraction_anomaly(row): skipped+=1; error('EXTRACTION_ANOMALY'); continue
@@ -75,6 +98,11 @@ def ingest_file(conn,path,program_cache,level_map):
 
 
 def main():
+    """Load every cutoff CSV in a folder and ingest the rows into PostgreSQL.
+
+    Connections: The CLI bootstraps the schema, loads program aliases, calls ingest_file() for each file and checks the final row-count reconciliation.
+    """
+
     ap=argparse.ArgumentParser(description=__doc__); ap.add_argument('raw_dir',nargs='?',default='data/raw'); ap.add_argument('--db-url',default=None); ap.add_argument('--ref-dir',default='data/reference'); args=ap.parse_args()
     paths=sorted(Path(args.raw_dir).glob('*.csv'))
     if not paths: raise SystemExit(f'No CSVs found in {args.raw_dir}')

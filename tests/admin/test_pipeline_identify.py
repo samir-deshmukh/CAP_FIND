@@ -1,3 +1,5 @@
+"""Focused tests for course and CAP round identification from canonical filenames."""
+
 from backend.admin.pipeline import identify
 
 

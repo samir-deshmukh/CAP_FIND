@@ -61,7 +61,15 @@ def _engineering_cutoff_seat_coverage(conn) -> dict[str, int]:
     }
 
 
+# ----------------------------------------------------------------------
+# Derived public tables: rebuild, reconcile and planner statistics
+# ----------------------------------------------------------------------
 def refresh(engine, course_family: str | None = None) -> None:
+    """Rebuild the PostgreSQL summary tables used by public search, college trends and seat details.
+
+    Connections: The CET Data Calculator's build endpoint runs this script when an administrator requests a rebuild; it refreshes derived tables and validates coverage before the build is marked complete.
+    """
+
     course_where = " AND p.program_family = :course" if course_family else ""
     seat_where = " WHERE s.program_family = :course" if course_family else ""
     params = {"course": course_family} if course_family else {}
@@ -346,6 +354,11 @@ def refresh(engine, course_family: str | None = None) -> None:
 
 
 def main() -> None:
+    """Parse the optional course filter and run the derived-data rebuild against DATABASE_URL.
+
+    Connections: The CLI calls refresh(); an optional --course limits the rebuild to one program family.
+    """
+
     parser = argparse.ArgumentParser(description="Build PostgreSQL derived data for the public Slide 2 UI.")
     parser.add_argument("--course", default=None, help="Optional program family to rebuild, e.g. BBA.")
     parser.add_argument("--job-id", type=int, default=None, help="Admin derived-data build job id.")

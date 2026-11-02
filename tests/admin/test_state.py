@@ -1,3 +1,5 @@
+"""Tests for allowed import-job status transitions and explicit terminal states."""
+
 from backend.admin.state import JobStatus, TERMINAL_STATUSES, can_transition
 
 

@@ -69,6 +69,7 @@ except ImportError:
 
 
 class ParseError(Exception):
+    """Signal that a seat-matrix page or course block cannot be parsed reliably."""
     pass
 
 
@@ -107,14 +108,26 @@ SKIP_PREFIXES = (
 MIN_NATIVE_TEXT_LEN = 40
 
 
+# ----------------------------------------------------------------------
+# Table cell and institute/course header normalization
+# ----------------------------------------------------------------------
 def slugify(label: str) -> str:
+    """Normalize a course or institution label into a stable filename-safe key.
+
+    Connections: The extractor uses this when naming output artifacts and comparing normalized course labels.
+    """
+
     s = label.strip().lower()
     s = re.sub(r"[^a-z0-9]+", "_", s)
     return s.strip("_") or "field"
 
 
 def row_cells(row: List[Optional[str]]) -> List[str]:
-    """Ordered, non-empty, whitespace-collapsed cell values from a table row."""
+    """Return the ordered non-empty text cells from one extracted table row.
+
+    Connections: Course-block parsers use this to interpret table rows consistently across PDFs with different blank cells.
+    """
+
     out = []
     for c in row:
         if c is None:
@@ -126,6 +139,11 @@ def row_cells(row: List[Optional[str]]) -> List[str]:
 
 
 def take_numbers(cells: List[str], count: int, context: str) -> List[float]:
+    """Read the requested number of numeric fields from a table row and report malformed rows.
+
+    Connections: parse_course_block() uses this to map course seat counts to the field names read from that table's own header.
+    """
+
     nums = [c for c in cells if NUM_RE.match(c)]
     if len(nums) != count:
         raise ParseError(f"{context}: expected {count} numbers, got {len(nums)} in {cells!r}")
@@ -138,8 +156,11 @@ def take_numbers(cells: List[str], count: int, context: str) -> List[float]:
 def get_institute_header(
     text: str, carried_university: str, carried_code: str, carried_name: str
 ) -> Tuple[str, str, str]:
-    """(university, institute_code, institute_name); falls back to carried
-    values on continuation pages that omit the header."""
+    """Extract institute code, institute name and university from the page header while carrying prior values when needed.
+
+    Connections: parse_page_tables() and the OCR fallback use this context to attach each course row to the correct institute.
+    """
+
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
     lines = [ln for ln in lines if not any(ln.startswith(p) for p in SKIP_PREFIXES)]
 
@@ -169,10 +190,13 @@ def get_institute_header(
 # native-text pages and most scanned-with-visible-gridlines pages).
 # ----------------------------------------------------------------------
 def find_course_header_field_names(header_row: List[Optional[str]]) -> List[str]:
-    """Derive numeric field names for a course row from its own header
-    row, so a different column set in another PDF still works.
-    Expected header shape: 'Choice Code', 'Course Name', <field>, <field>, ...
+    """Derive numeric field names from each course's own header row.
+
+    The expected header begins with 'Choice Code' and 'Course Name', followed
+    by one or more seat-count fields. Reading the names from the PDF allows
+    different courses and PDF versions to use different column sets.
     """
+
     cells = row_cells(header_row)
     try:
         cc_idx = cells.index("Choice Code")
@@ -193,9 +217,13 @@ def find_course_header_field_names(header_row: List[Optional[str]]) -> List[str]
 
 
 def find_categories(category_row: List[Optional[str]]) -> List[str]:
-    """Read the reservation-category list from a table's own 'Category'
-    row instead of hard-coding it, so a PDF with a different category
-    set still works. Expected shape: 'Category', <cat1>, <cat2>, ..., 'Total'."""
+    """Read reservation categories from the table's own 'Category' row.
+
+    This avoids hard-coding a category list and supports PDFs whose category
+    columns differ. The row is expected to contain 'Category', the category
+    names, and a trailing 'Total' column.
+    """
+
     cells = row_cells(category_row)
     if not cells or cells[0] != "Category":
         raise ParseError(f"expected 'Category' row, got {cells!r}")
@@ -207,6 +235,9 @@ def find_categories(category_row: List[Optional[str]]) -> List[str]:
     return body
 
 
+# ----------------------------------------------------------------------
+# Structured table parsing and category/seat mapping
+# ----------------------------------------------------------------------
 def parse_course_block(
     pnum: int,
     table: List[List[Optional[str]]],
@@ -217,8 +248,13 @@ def parse_course_block(
     affiliation_status: str,
     cap_seats: int,
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]], int]:
-    """Parse one course block (course row + its category table) starting
-    at `start` (the header row index). Returns (course, long_rows, next_index)."""
+    """Parse one course block beginning at its table-header row.
+
+    The block contains course metadata followed by its category seat table.
+    Returns the course summary, normalized long-form seat rows, and the next
+    table index so the caller can continue with another course block.
+    """
+
     header_row = table[start]
     field_names = find_course_header_field_names(header_row)
     header_cells = row_cells(header_row)
@@ -368,8 +404,13 @@ def parse_page_tables(
     institution_name: str,
     university: str,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Parse every course block in every table on a page (handles pages
-    with multiple tables and/or multiple course rows per table)."""
+    """Parse every course block in every table found on one PDF page.
+
+    A page may contain multiple tables, and a table may contain multiple
+    course rows. The parser walks every detected course header instead of
+    assuming one course or one table per page.
+    """
+
     all_courses: List[Dict[str, Any]] = []
     all_long: List[Dict[str, Any]] = []
 
@@ -408,7 +449,17 @@ def parse_page_tables(
 # OCR fallback for pages with no usable text layer / no parseable table
 # (scanned pages, or a garbled text extraction in some other PDF).
 # ----------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# OCR fallback and single-PDF output orchestration
+# ----------------------------------------------------------------------
 def ocr_page_text(page: "pdfplumber.page.Page", dpi: int, lang: str) -> str:
+    """Use OCR text for a best-effort metadata fallback when no seat table parses.
+
+    Some pages contain institute/course headings but no reliably aligned
+    category table. This path preserves whatever header information can be
+    recovered rather than dropping the page entirely.
+    """
+
     if pytesseract is None:
         return ""
     try:
@@ -421,10 +472,11 @@ def ocr_page_text(page: "pdfplumber.page.Page", dpi: int, lang: str) -> str:
 def fallback_parse_from_text(
     pnum: int, text: str, institution_code: str, institution_name: str, university: str
 ) -> Optional[Dict[str, Any]]:
-    """Best-effort metadata-only extraction when the page has no
-    parseable seat table (e.g. OCR text with no reliable column
-    alignment). Captures whatever header info is findable instead of
-    dropping the page entirely."""
+    """Recover institute/course/seat details from OCR text when a page has no usable table structure.
+
+    Connections: process_single_pdf() calls this after OCR; partial metadata is retained when complete rows cannot be recovered.
+    """
+
     if not text or not text.strip():
         return None
     cap_m = CAP_SEATS_RE.search(text)
@@ -469,6 +521,11 @@ def process_single_pdf(
     pdf_path: Path, outdir: Path, dpi: int, lang: str, use_ocr: bool, force_ocr: bool,
     write_json: bool = True,
 ) -> Dict[str, Any]:
+    """Extract course metadata and seat allocations from one seat-matrix PDF and write its audit/output files.
+
+    Connections: backend.local_worker and backend.admin.processing use this extractor; the import pipeline validates and stages its CSV artifacts before approval.
+    """
+
     all_courses: List[Dict[str, Any]] = []
     metadata_emitted_choices: set[Tuple[str, str]] = set()
     # Seat rows can be enormous on CAP seat-matrix PDFs. Stream them directly
@@ -658,6 +715,11 @@ def process_single_pdf(
 
 
 def main() -> int:
+    """Parse CLI options and run seat-matrix extraction for the supplied PDF.
+
+    Connections: The script entry point calls process_single_pdf() and writes the course, long-seat and page-audit artifacts.
+    """
+
     ap = argparse.ArgumentParser(description="Extract CET Seat Matrix PDFs (pdfplumber-based, generalized)")
     ap.add_argument("path", help="PDF file or folder of PDFs")
     ap.add_argument("--out", default="extracted", help="Output directory")

@@ -5,7 +5,15 @@ from pathlib import Path
 from urllib.parse import urljoin
 from xml.sax.saxutils import escape
 
+# ----------------------------------------------------------------------
+# Deployment-specific crawler files
+# ----------------------------------------------------------------------
 def main():
+    """Generate robots.txt and sitemap.xml for one explicitly supplied HTTPS production domain.
+
+    Connections: The deployment workflow runs this after site generation; only canonical public HTML pages are included in the sitemap.
+    """
+
     ap=argparse.ArgumentParser()
     ap.add_argument('--site',default='site')
     ap.add_argument('--base-url',required=True,help='Absolute production HTTPS URL')

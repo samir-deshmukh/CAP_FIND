@@ -1,3 +1,5 @@
+"""Tests that seat-matrix course metadata and source labels survive extraction and import staging."""
+
 from scripts.seat_matrix_extractor import parse_course_block
 
 

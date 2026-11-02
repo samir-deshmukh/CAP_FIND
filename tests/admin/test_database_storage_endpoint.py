@@ -1,3 +1,5 @@
+"""Tests for the admin database-storage endpoint and its read-only relation-size reporting."""
+
 from starlette.requests import Request
 
 from backend import main

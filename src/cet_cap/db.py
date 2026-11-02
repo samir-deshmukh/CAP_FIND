@@ -5,10 +5,11 @@ from sqlalchemy import Engine, create_engine
 
 
 def get_engine(db_url: str | None = None) -> Engine:
-    """Return the single authoritative PostgreSQL engine.
+    """Return the single authoritative PostgreSQL engine with a bounded pool.
 
-    SQLite is deliberately unsupported. Keeping a second local database path
-    can make admin-approved data differ from what the public site reads.
+    SQLite is deliberately unsupported: a second local database path could
+    make admin-approved data differ from the data read by the public site.
+    backend.api.get_active_engine() caches this engine for public requests.
     """
     url = (db_url or os.getenv("DATABASE_URL", "")).strip()
     if not url:

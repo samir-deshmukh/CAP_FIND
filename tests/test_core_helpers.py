@@ -1,3 +1,5 @@
+"""Tests for database result wrappers, institute normalization and public-tree safety checks."""
+
 import json
 
 from backend.admin.db import Result

@@ -18,12 +18,22 @@ _DB_STATUS = None
 
 
 def _write_progress(directory: Path, payload: dict) -> None:
+    """Write the latest extraction progress to a temporary file, then atomically replace progress.json.
+
+    Connections: The local worker monitor reads this file; the rename prevents it from seeing a partially written JSON document.
+    """
+
     temp = directory / "progress.json.tmp"
     temp.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
     temp.replace(directory / "progress.json")
 
 
 def _db_connection():
+    """Open or reuse the worker's PostgreSQL connection when a job ID and DATABASE_URL are configured.
+
+    Connections: Checkpoint helpers use this connection so pause/cancel state remains visible across backend instances.
+    """
+
     global _DB_CONN
     if _DB_CONN is not None and not getattr(_DB_CONN, "closed", True):
         return _DB_CONN
@@ -39,6 +49,11 @@ def _db_connection():
 
 
 def _db_status(force: bool = False):
+    """Read and briefly cache the durable import status from PostgreSQL.
+
+    Connections: checkpoint() calls this to honor server-side PAUSED and CANCELLED states even when the worker is running on another computer.
+    """
+
     global _DB_LAST_POLL, _DB_STATUS, _DB_CONN
     job_id = os.environ.get("CAPFIND_JOB_ID", "").strip()
     if not job_id or not os.environ.get("DATABASE_URL", "").strip():
@@ -68,6 +83,11 @@ def _db_status(force: bool = False):
 
 
 def _write_db_progress(page: int, total: int) -> None:
+    """Persist the current page and chunk counters for the worker-owned import job.
+
+    Connections: The backend Import Center reads these columns; the worker ID condition prevents a stale worker from updating a job it no longer owns.
+    """
+
     global _DB_LAST_WRITE, _DB_CONN
     job_id = os.environ.get("CAPFIND_JOB_ID", "").strip()
     worker_id = os.environ.get("CAPFIND_WORKER_ID", "").strip()
@@ -100,6 +120,11 @@ def _write_db_progress(page: int, total: int) -> None:
 
 
 def checkpoint(page: int, total: int) -> None:
+    """Publish progress and cooperatively honor pause/cancel requests at an extractor checkpoint.
+
+    Connections: The cutoff and seat-matrix extractors call this between pages; it writes local progress and PostgreSQL counters, waits while paused, and raises on cancellation.
+    """
+
     raw_dir = os.environ.get("CAPFIND_JOB_CONTROL_DIR", "").strip()
     if not raw_dir and not os.environ.get("CAPFIND_JOB_ID", "").strip():
         return
@@ -113,9 +138,19 @@ def checkpoint(page: int, total: int) -> None:
     global_page = int(page) + page_offset
 
     def cancelled() -> bool:
+        """Check both the local CANCEL marker and the durable PostgreSQL job state.
+
+        Connections: The nested checkpoint helper uses this before and during a pause wait so cancellation is not delayed.
+        """
+
         return bool(cancel and cancel.exists()) or _db_status() == "CANCELLED"
 
     def paused() -> bool:
+        """Check both the local PAUSE marker and the durable PostgreSQL job state.
+
+        Connections: The nested checkpoint helper uses this to pause extraction even when an admin request reached a different backend instance.
+        """
+
         return bool(pause and pause.exists()) or _db_status() == "PAUSED"
 
     if cancelled():

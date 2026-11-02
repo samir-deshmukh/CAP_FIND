@@ -1,3 +1,5 @@
+"""Tests for engineering cutoff-to-seat coverage calculations, including matching-year and zero-count cases."""
+
 from scripts.refresh_derived_data import _engineering_cutoff_seat_coverage
 
 

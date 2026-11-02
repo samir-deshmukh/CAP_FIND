@@ -18,10 +18,16 @@ LOCAL_IMPORTS = BASE / "data" / "imports"
 
 
 class StorageNotConfigured(RuntimeError):
+    """Signal that the selected private source-storage backend is not configured safely."""
+
     pass
 
 
 def storage_backend() -> str:
+    """Choose local or private S3-compatible source storage from configuration.
+
+    Connections: Upload, processing and deletion helpers call this to select the storage path.
+    """
     configured = os.getenv("CET_PDF_STORAGE_BACKEND", "").strip().lower()
     if configured:
         if configured not in {"local", "s3"}:
@@ -34,6 +40,10 @@ def storage_backend() -> str:
 
 
 def _s3_config() -> dict:
+    """Read and validate the private S3 endpoint, bucket and credentials.
+
+    Connections: _client() uses this configuration to create the storage client; missing settings fail closed.
+    """
     endpoint = os.getenv("CET_S3_ENDPOINT_URL", "").strip()
     bucket = os.getenv("CET_S3_BUCKET", "").strip()
     access = os.getenv("CET_S3_ACCESS_KEY_ID", "").strip()
@@ -53,6 +63,10 @@ def _s3_config() -> dict:
 
 
 def _client():
+    """Create the S3-compatible client and return it with the configured bucket.
+
+    Connections: Source upload, download and deletion helpers share this client setup.
+    """
     import boto3
     from botocore.config import Config
     cfg = _s3_config()
@@ -68,6 +82,10 @@ def _client():
 
 
 def _parse_object_uri(value: str) -> tuple[str, str]:
+    """Split a private s3:// URI into its bucket and object key.
+
+    Connections: materialize_source() and delete_source() use the parsed values after validating the configured bucket.
+    """
     parsed = urlparse(value)
     if parsed.scheme != "s3" or not parsed.netloc or not parsed.path.strip("/"):
         raise ValueError("Invalid source object URI")
@@ -75,6 +93,10 @@ def _parse_object_uri(value: str) -> tuple[str, str]:
 
 
 def store_source_pdf(local_path: Path, object_key: str, sha256: str) -> str:
+    """Move or upload a source PDF into the configured private import storage.
+
+    Connections: backend.main calls this after preflight and stores the returned path on the import job.
+    """
     local_path = Path(local_path)
     if storage_backend() == "local":
         LOCAL_IMPORTS.mkdir(parents=True, exist_ok=True)
@@ -121,7 +143,10 @@ def store_source_pdf(local_path: Path, object_key: str, sha256: str) -> str:
 
 @contextmanager
 def materialize_source(stored_path: str):
-    """Yield a local path for a stored source and clean up temporary downloads."""
+    """Provide a local working path for a stored source and clean temporary downloads.
+
+    Connections: The processing pipeline uses this context manager to read private local/S3 files without exposing public URLs.
+    """
     value = str(stored_path or "")
     if value.startswith("local://"):
         raise FileNotFoundError("This source belongs to the retired local-worker flow")
@@ -162,6 +187,10 @@ def materialize_source(stored_path: str):
 
 
 def delete_source(stored_path: str) -> None:
+    """Delete a source artifact from the configured private storage backend.
+
+    Connections: Admin import deletion calls this after checking job state; public release data is handled separately.
+    """
     value = str(stored_path or "")
     if not value or value.startswith("local://"):
         return

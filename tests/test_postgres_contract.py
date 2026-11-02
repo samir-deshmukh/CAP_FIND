@@ -1,3 +1,5 @@
+"""Tests for PostgreSQL schema constraints and idempotent upsert contracts."""
+
 import os
 import pytest
 from sqlalchemy import text

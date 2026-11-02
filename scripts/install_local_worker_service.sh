@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Install a per-user systemd service and keep its shared worker token in a private env file.
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CET_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 VENV="$HOME/.venvs/capfind-local-worker"

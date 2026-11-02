@@ -81,7 +81,15 @@ ImageOps = None
 _OCR_LOAD_ATTEMPTED = False
 
 
+# ----------------------------------------------------------------------
+# Optional PDF engine and OCR dependency setup
+# ----------------------------------------------------------------------
 def _ensure_pdfium_loaded() -> None:
+    """Load the PDFium-backed fitz adapter only when extraction first needs it.
+
+    Connections: process_single_pdf() uses this lazy import so the extractor can start without loading the PDF engine for unrelated helper use.
+    """
+
     global fitz_pdfium
     if fitz_pdfium is not None:
         return
@@ -93,6 +101,11 @@ def _ensure_pdfium_loaded() -> None:
 
 
 def _ensure_ocr_loaded() -> bool:
+    """Load the optional OCR/image libraries and report whether they are available.
+
+    Connections: The extraction selector and OCR fallback call this before rendering or recognizing scanned pages.
+    """
+
     global pytesseract, Image, ImageEnhance, ImageFilter, ImageOps, _OCR_LOAD_ATTEMPTED
     if _OCR_LOAD_ATTEMPTED:
         return pytesseract is not None and Image is not None
@@ -157,10 +170,11 @@ def _split_program_header_metadata(raw_name: str) -> tuple[str, str, str]:
     """Separate inline Status/Home University text from a program heading.
 
     Some CAP PDFs place all three fields on one extracted text line. The
-    program-code regex is intentionally permissive for newly introduced
-    branch names, so strip the following metadata here instead of treating
-    it as part of the program's identity.
+    program-code regex accepts newly introduced branch names, so following
+    metadata must be stripped here rather than mistaken for part of the
+    program's identity.
     """
+
     match = re.search(r"\s+Status\s*:\s*", raw_name, re.IGNORECASE)
     if not match:
         return raw_name.strip(), "", ""
@@ -185,7 +199,15 @@ BARE_STAGE_TOKENS = {
 IGNORED_BARE_WORDS = {"STAGE"}
 
 
+# ----------------------------------------------------------------------
+# Source text cleanup and cutoff-row interpretation
+# ----------------------------------------------------------------------
 def is_category_token(tok: str) -> bool:
+    """Check whether one token has the structural shape of a CET category code.
+
+    Connections: extract_category_tokens() uses this so the extractor can recognize course-specific category codes without a fixed whitelist.
+    """
+
     tok = tok.strip()
     if not tok or tok in BARE_STAGE_TOKENS or tok in IGNORED_BARE_WORDS:
         return False
@@ -195,6 +217,11 @@ def is_category_token(tok: str) -> bool:
 
 
 def extract_category_tokens(line: str) -> List[str]:
+    """Read category-code tokens from a line when the line is structurally a category row.
+
+    Connections: parse_structured_page() uses these tokens to interpret the category columns above cutoff values.
+    """
+
     parts = line.strip().split()
     if not parts or not all(is_category_token(p) for p in parts):
         return []
@@ -205,6 +232,11 @@ def extract_category_tokens(line: str) -> List[str]:
 # Text cleaning
 # ----------------------------------------------------------------------
 def clean_text(text: str) -> str:
+    """Normalize OCR/native text by removing control characters and standardizing whitespace.
+
+    Connections: normalize_lines() and the page parsers call this before interpreting metadata or cutoff rows.
+    """
+
     text = text.replace("\x00", " ").replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -212,10 +244,20 @@ def clean_text(text: str) -> str:
 
 
 def normalize_lines(text: str) -> List[str]:
+    """Convert a text block into cleaned, non-empty lines.
+
+    Connections: Metadata and structured-page parsers use this shared line representation.
+    """
+
     return [clean_text(line) for line in text.splitlines() if clean_text(line)]
 
 
 def merge_split_rank_lines(lines: List[str]) -> List[str]:
+    """Join adjacent text lines when a rank and its percentile were split by PDF extraction.
+
+    Connections: parse_structured_page() uses the repaired lines before mapping cutoff values to categories.
+    """
+
     merged: List[str] = []
     i = 0
     n = len(lines)
@@ -235,6 +277,11 @@ def merge_split_rank_lines(lines: List[str]) -> List[str]:
 # Metadata
 # ----------------------------------------------------------------------
 def extract_metadata(lines: List[str]) -> Dict[str, str]:
+    """Collect institute, course, year, round and other document-level metadata from page text.
+
+    Connections: process_single_pdf() carries this metadata into each extracted record and output artifact.
+    """
+
     meta = {
         "institution_code": "",
         "institution_name": "",
@@ -308,6 +355,11 @@ def extract_metadata(lines: List[str]) -> Dict[str, str]:
 # Section detection
 # ----------------------------------------------------------------------
 def detect_section(line: str) -> Optional[str]:
+    """Identify the quota/section code represented by one line of source text.
+
+    Connections: parse_structured_page() uses this to attach the correct section to cutoff rows.
+    """
+
     normalized = re.sub(r"\s+", " ", line).strip().lower()
     for sec in SECTION_NAMES:
         if normalized == sec.lower():
@@ -335,6 +387,11 @@ def detect_section(line: str) -> Optional[str]:
 # Stage splitting (inline "Stage-I ... values ..." on one line)
 # ----------------------------------------------------------------------
 def split_by_stage(line: str) -> List[Tuple[str, str]]:
+    """Split a line into stage-labelled parts when a PDF combines multiple stage values.
+
+    Connections: The structured parser uses these parts to preserve stage information for each cutoff record.
+    """
+
     parts: List[Tuple[str, str]] = []
     matches = list(STAGE_RE.finditer(line))
     if not matches:
@@ -358,14 +415,13 @@ def update_metadata_from_line(
 ) -> Optional[str]:
     """Update table metadata as each page line is read.
 
-    CAP PDFs can contain multiple program tables on one page and a table can
-    continue onto the next page. Extracting one metadata dictionary per page
-    assigns every row to the first program on that page and loses context on
-    continuation pages. This line-level updater preserves the source order.
-    It also joins a wrapped program title when its opening parenthesis has
-    not yet been closed in the source text.
-    Returns the metadata event kind when a line was consumed.
+    CAP PDFs can contain multiple program tables on one page, and a table can
+    continue onto the next page. A single metadata dictionary per page would
+    assign later rows to the wrong program. This line-level updater preserves
+    source order and joins wrapped program titles whose opening parenthesis
+    has not yet closed. Returns the metadata event kind when a line is consumed.
     """
+
     state = parser_state if parser_state is not None else {}
     pending_program = bool(state.get("pending_program_continuation"))
     if pending_program:
@@ -459,6 +515,11 @@ def parse_structured_page(
     metadata: Dict[str, str],
     parser_state: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
+    """Parse one PDF page's native text into normalized cutoff records and page metadata.
+
+    Connections: process_single_pdf() calls this for each page before deciding whether OCR or table extraction is needed.
+    """
+
     records: List[Dict[str, Any]] = []
     state = parser_state if parser_state is not None else {}
     current_section: Optional[str] = state.get("section")
@@ -557,7 +618,15 @@ def parse_structured_page(
 # ----------------------------------------------------------------------
 # OCR helpers
 # ----------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# Image, OCR and alternate table extraction helpers
+# ----------------------------------------------------------------------
 def render_page(page: fitz.Page, dpi: int = 300) -> Any:
+    """Render one PDF page to a Pillow image at the requested resolution.
+
+    Connections: OCR and image-preprocessing helpers use this when the selected extraction path needs pixels rather than native text.
+    """
+
     if Image is None:
         raise RuntimeError("Pillow not installed. Run: pip install pillow")
     scale = dpi / 72.0
@@ -567,6 +636,11 @@ def render_page(page: fitz.Page, dpi: int = 300) -> Any:
 
 
 def preprocess_image(img: "Image.Image") -> "Image.Image":
+    """Convert a rendered page image into a cleaner grayscale image for OCR.
+
+    Connections: ocr_page() calls this before passing the image to Tesseract.
+    """
+
     gray = ImageOps.grayscale(img)
     gray = ImageOps.autocontrast(gray)
     gray = gray.filter(ImageFilter.SHARPEN)
@@ -575,6 +649,11 @@ def preprocess_image(img: "Image.Image") -> "Image.Image":
 
 
 def ocr_page(page: fitz.Page, dpi: int, lang: str = "eng") -> str:
+    """Recognize text from one rendered PDF page using the configured OCR language.
+
+    Connections: process_single_pdf() uses this fallback when native text extraction is insufficient.
+    """
+
     if not _ensure_ocr_loaded() or pytesseract is None:
         raise RuntimeError("pytesseract/Pillow not installed. Install the optional OCR dependencies.")
     img = render_page(page, dpi)
@@ -586,6 +665,11 @@ def ocr_page(page: fitz.Page, dpi: int, lang: str = "eng") -> str:
 # Camelot (opt-in)
 # ----------------------------------------------------------------------
 def run_camelot_on_page(pdf_path: Path, page_num: int) -> List[Dict]:
+    """Try extracting tables from one PDF page with Camelot and return its table data.
+
+    Connections: The extraction pipeline uses this as an alternate source when structured text/OCR does not produce reliable rows.
+    """
+
     try:
         import camelot
     except ImportError:
@@ -608,6 +692,11 @@ def run_camelot_on_page(pdf_path: Path, page_num: int) -> List[Dict]:
 
 
 def camelot_to_records(tables: List[Dict], metadata: Dict, page_num: int) -> List[Dict]:
+    """Convert Camelot table cells into the extractor's normalized cutoff-record shape.
+
+    Connections: process_single_pdf() merges these records with native-text and OCR candidates.
+    """
+
     records = []
     for tbl in tables:
         df = tbl["data"]
@@ -640,12 +729,25 @@ def camelot_to_records(tables: List[Dict], metadata: Dict, page_num: int) -> Lis
 # Extraction-technique auto-detection (once per PDF, not per page)
 # ----------------------------------------------------------------------
 def _count_value_hits(lines: List[str]) -> int:
+    """Count cutoff-like numeric values found in a group of text lines.
+
+    Connections: choose_extraction_technique() uses the count as one signal when comparing extraction quality.
+    """
+
     return sum(len(RANK_VALUE_RE.findall(line)) for line in lines)
 
 
+# ----------------------------------------------------------------------
+# Extraction-source selection and record reconciliation
+# ----------------------------------------------------------------------
 def choose_extraction_technique(
     doc: "fitz.Document", dpi: int, lang: str, sample_size: int = 5
 ) -> Tuple[str, Dict[str, int]]:
+    """Select the extraction method for the PDF from a bounded sample of pages.
+
+    Connections: process_single_pdf() uses the result for the document so it does not switch methods unpredictably page by page.
+    """
+
     n = len(doc)
     if n <= sample_size:
         sample_idx = list(range(n))
@@ -693,10 +795,20 @@ SOURCE_PRIORITY = {
 
 
 def get_priority(source: str) -> int:
+    """Return the configured source priority used when competing extraction records are merged.
+
+    Connections: merge_records() uses this order to prefer the more reliable record source.
+    """
+
     return SOURCE_PRIORITY.get(source, 99)
 
 
 def merge_records(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Merge competing records for the same cutoff row while preferring higher-priority sources.
+
+    Connections: deduplicate_and_merge() uses this helper after collecting native, OCR and table-extraction candidates.
+    """
+
     records_sorted = sorted(records, key=lambda r: get_priority(r.get("source", "")))
     merged = records_sorted[0].copy()
     for rec in records_sorted[1:]:
@@ -712,6 +824,11 @@ def merge_records(records: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def deduplicate_and_merge(all_records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Group duplicate cutoff rows and combine their best available fields.
+
+    Connections: process_single_pdf() calls this before writing final CSV/JSON artifacts.
+    """
+
     groups = defaultdict(list)
     for rec in all_records:
         key = (
@@ -740,6 +857,9 @@ def deduplicate_and_merge(all_records: List[Dict[str, Any]]) -> List[Dict[str, A
 # ----------------------------------------------------------------------
 # Per-PDF processing
 # ----------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# End-to-end single-PDF extraction and artifact writing
+# ----------------------------------------------------------------------
 def process_single_pdf(
     pdf_path: Path,
     outdir: Path,
@@ -749,6 +869,11 @@ def process_single_pdf(
     use_pdfium: bool = True,
     initial_context: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
+    """Extract cutoff rows and page provenance from one CAP PDF, then write normalized artifacts.
+
+    Connections: backend.admin.processing and backend.local_worker call this extractor; the import pipeline validates and stages its outputs before approval.
+    """
+
     doc = fitz.open(pdf_path)
     print(f"  pages: {len(doc)}")
     technique = "hybrid" if use_pdfium else "native_only"
@@ -950,6 +1075,11 @@ CSV_FIELDS = [
 
 
 def write_csv(path: Path, records: List[Dict[str, Any]]) -> None:
+    """Write normalized cutoff records to a CSV file with the expected field order.
+
+    Connections: process_single_pdf() and the CLI output combiner use this for files consumed by validation/staging.
+    """
+
     if not records:
         path.write_text("", encoding="utf-8")
         return
@@ -964,10 +1094,20 @@ def write_csv(path: Path, records: List[Dict[str, Any]]) -> None:
 
 
 def write_json(path: Path, data: Any) -> None:
+    """Write structured extraction output as UTF-8 JSON.
+
+    Connections: process_single_pdf() uses this for machine-readable records and audit artifacts.
+    """
+
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def combine_csvs(outdir: Path) -> Optional[Path]:
+    """Combine per-PDF cutoff CSV outputs in an extraction directory into one file.
+
+    Connections: The command-line batch workflow uses this when multiple PDFs are processed together.
+    """
+
     combined_path = outdir / "ALL_PDFS_cutoffs.csv"
     per_pdf = sorted(p for p in outdir.glob("*_cutoffs.csv") if p != combined_path)
     if not per_pdf:
@@ -988,6 +1128,11 @@ def combine_csvs(outdir: Path) -> Optional[Path]:
 # Entry point
 # ----------------------------------------------------------------------
 def main() -> int:
+    """Parse command-line options and run extraction for the supplied PDF input paths.
+
+    Connections: The script entry point calls process_single_pdf() and writes artifacts for later validation/import.
+    """
+
     parser = argparse.ArgumentParser(
         description="Universal CET Batch Extractor (generic, no hardcoded category lists)"
     )

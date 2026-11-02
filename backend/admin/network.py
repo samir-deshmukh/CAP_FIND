@@ -1,4 +1,8 @@
-"""Client address extraction that only honors forwarded headers from configured proxies."""
+"""Client address extraction that only honors forwarded headers from configured proxies.
+
+backend.main uses client_ip() for request throttling and audit-related decisions.
+Forwarded values are trusted only when the direct peer matches configured proxy ranges.
+"""
 from __future__ import annotations
 
 import ipaddress
@@ -11,7 +15,9 @@ def client_ip(request: Request) -> str:
     """Return a client IP without trusting attacker-controlled forwarding headers.
 
     Set CET_TRUSTED_PROXY_IPS to comma-separated proxy IPs/CIDRs only when the
-    reverse proxy is known to append the actual client address to X-Forwarded-For.
+    reverse proxy is known to append the actual client address to
+    X-Forwarded-For. Forwarded values are ignored unless the direct peer is
+    inside one of those configured trusted proxy ranges.
     """
     peer = request.client.host if request.client else ""
     if not peer:

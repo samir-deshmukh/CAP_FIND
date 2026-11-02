@@ -1,3 +1,5 @@
+"""Tests for remote-worker source handling, authentication requirements and safe job-scoped paths."""
+
 from io import BytesIO
 
 import pytest

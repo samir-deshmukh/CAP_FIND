@@ -1,3 +1,5 @@
+"""Tests for local and private S3-compatible source-PDF storage, path confinement and streaming behavior."""
+
 
 import pytest
 from io import BytesIO

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Locate the project virtual environment and forward all arguments to the local extraction CLI.
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
 PYTHON="${HOME}/.venvs/capfind-local-worker/bin/python"

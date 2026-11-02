@@ -22,7 +22,15 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 LOCK_KEY = 73829104
 
 
+# ----------------------------------------------------------------------
+# Resolver child-process lock and command-line entry point
+# ----------------------------------------------------------------------
 def acquire_lock(conn):
+    """Try to acquire the PostgreSQL advisory lock reserved for resolver work.
+
+    Connections: main() uses this before starting a resolver step so two child processes cannot run memory-heavy lookups at the same time.
+    """
+
     # PostgreSQL advisory locks serialize resolver children on the single
     # low-memory Render instance. Fail closed if lock state cannot be checked.
     try:
@@ -35,6 +43,11 @@ def acquire_lock(conn):
 
 
 def release_lock(conn):
+    """Release the resolver advisory lock held by the current database connection.
+
+    Connections: main() calls this in its finally block so the next bounded resolver child can proceed.
+    """
+
     try:
         conn.execute("SELECT pg_advisory_unlock(?)", (LOCK_KEY,))
     except Exception:
@@ -42,6 +55,11 @@ def release_lock(conn):
 
 
 def main() -> int:
+    """Parse one resolver job/scan request and run at most one bounded resolver step.
+
+    Connections: backend.main starts this script in a child process; it calls backend.admin.resolver.resolve_import_job() and prints a machine-readable result for the parent process.
+    """
+
     parser = argparse.ArgumentParser()
     parser.add_argument("job_id", type=int, nargs="?")
     parser.add_argument("--limit", type=int, default=1)

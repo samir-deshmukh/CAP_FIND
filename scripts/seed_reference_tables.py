@@ -11,7 +11,15 @@ from validate_data import parse_filename  # noqa: E402
 from db_bootstrap import bootstrap_schema, engine_for  # noqa: E402
 
 
+# ----------------------------------------------------------------------
+# Reference-table seeding and institute-name reconciliation
+# ----------------------------------------------------------------------
 def seed_base_categories(conn, ref_dir: Path) -> int:
+    """Upsert the canonical category codes and descriptions from the reference CSV.
+
+    Connections: main() calls this inside one database transaction before cutoff ingestion.
+    """
+
     df = pd.read_csv(ref_dir / 'category_whitelist.csv', dtype=str, keep_default_na=False)
     for _, row in df.iterrows():
         conn.execute(text('''INSERT INTO base_categories (base_code, category_full, category_group)
@@ -23,6 +31,11 @@ def seed_base_categories(conn, ref_dir: Path) -> int:
 
 
 def seed_sections(conn, ref_dir: Path) -> int:
+    """Upsert the canonical CAP section codes and descriptions.
+
+    Connections: main() calls this so cutoff rows can reference valid section codes.
+    """
+
     df = pd.read_csv(ref_dir / 'section_whitelist.csv', dtype=str, keep_default_na=False)
     for _, row in df.iterrows():
         conn.execute(text('''INSERT INTO sections (section_code, section_full)
@@ -32,6 +45,11 @@ def seed_sections(conn, ref_dir: Path) -> int:
 
 
 def seed_stages(conn, ref_dir: Path) -> int:
+    """Insert the canonical stage codes from the stage reference CSV.
+
+    Connections: main() calls this before ingestion; existing stage rows are left unchanged.
+    """
+
     vals = sorted(set(pd.read_csv(ref_dir / 'stage_whitelist.csv', dtype=str, keep_default_na=False)['canonical']))
     for value in vals:
         conn.execute(text('INSERT INTO stages(stage_code) VALUES(:v) ON CONFLICT(stage_code) DO NOTHING'), {'v':value})
@@ -39,6 +57,11 @@ def seed_stages(conn, ref_dir: Path) -> int:
 
 
 def _pick_canonical_name(code: str, by_year: dict[int, Counter]) -> str:
+    """Choose the most common institute name from the latest year, using alphabetical order to break ties.
+
+    Connections: seed_institutes() uses this when historical source PDFs contain multiple name variants for one institute code.
+    """
+
     latest_year = max(by_year)
     counts = by_year[latest_year].most_common()
     top = counts[0][1]
@@ -46,6 +69,11 @@ def _pick_canonical_name(code: str, by_year: dict[int, Counter]) -> str:
 
 
 def seed_institutes(conn, raw_dir: Path) -> tuple[int,int]:
+    """Build the institute registry from names found in raw cutoff CSVs, grouped by source year.
+
+    Connections: main() calls this after seeding lookup tables; stable institute codes are used to reconcile changing names.
+    """
+
     names_by_code: dict[str,dict[int,Counter]] = defaultdict(lambda: defaultdict(Counter))
     for path in sorted(raw_dir.glob('*.csv')):
         meta = parse_filename(path)
@@ -66,6 +94,11 @@ def seed_institutes(conn, raw_dir: Path) -> tuple[int,int]:
 
 
 def main():
+    """Create the schema and seed category, section, stage and institute reference tables.
+
+    Connections: The CLI opens one transaction and calls the seed helpers; the application later uses these tables when validating and searching data.
+    """
+
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--db-url',default=None)
     ap.add_argument('--raw-dir',default='data/raw')

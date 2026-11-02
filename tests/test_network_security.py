@@ -1,3 +1,5 @@
+"""Tests for trusted-proxy handling and safe interpretation of forwarded client IP headers."""
+
 from starlette.requests import Request
 
 from backend.admin.network import client_ip

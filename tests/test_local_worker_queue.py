@@ -1,3 +1,5 @@
+"""Tests for local worker queue polling and cleanup of intermediate extraction artifacts."""
+
 from pathlib import Path
 
 from backend import local_worker

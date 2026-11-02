@@ -1,3 +1,5 @@
+"""Tests for the admin PostgreSQL adapter's SQL parameter conversion and database URL restrictions."""
+
 import pytest
 
 from backend.admin import db

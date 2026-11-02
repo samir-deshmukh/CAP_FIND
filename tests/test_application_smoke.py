@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# Smoke tests for FastAPI application startup and public API import configuration.
+
 import importlib
 
 

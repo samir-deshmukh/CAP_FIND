@@ -1,3 +1,5 @@
+"""Tests public API validation, rate limiting, cache behavior and response shaping without requiring a live database."""
+
 from types import SimpleNamespace
 
 import pandas as pd

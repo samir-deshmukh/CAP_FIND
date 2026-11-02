@@ -17,7 +17,15 @@ from src.cet_cap.db import get_engine
 
 NAME_SIMILARITY_THRESHOLD=0.30
 
+# ----------------------------------------------------------------------
+# Institute contact validation and safe database enrichment
+# ----------------------------------------------------------------------
 def validate_website(value):
+    """Normalize an institute website URL and reject malformed, unsafe or placeholder values.
+
+    Connections: load_and_reconcile() uses this before any external website value can enter the institute enrichment candidate set.
+    """
+
     if not value:return None
     value=str(value).strip()
     if not value or value.lower() in {'unknown','nan','none'}:return None
@@ -28,9 +36,20 @@ def validate_website(value):
     if (p.hostname or '').lower() in {'localhost','127.0.0.1','0.0.0.0','::1'}:return None
     return urlunsplit((p.scheme.lower(),p.netloc,p.path or '/',p.query,p.fragment))
 
-def norm(s):return re.sub(r'\s+',' ',re.sub(r'[^A-Z0-9 ]',' ',str(s).upper())).strip()
+def norm(s):
+    """Normalize an institute name for comparison by uppercasing and removing punctuation/extra spaces.
+
+    Connections: load_and_reconcile() uses this to compare the supplied reference name with the authoritative institute name.
+    """
+    return re.sub(r'\s+',' ',re.sub(r'[^A-Z0-9 ]',' ',str(s).upper())).strip()
+
 
 def load_and_reconcile(csv_path, conn):
+    """Match enrichment CSV rows to known institute codes and quarantine conflicts or weak name matches.
+
+    Connections: main() calls this before applying accepted city, website and address updates to the PostgreSQL institute registry.
+    """
+
     raw=pd.read_csv(csv_path,dtype=str,keep_default_na=False); raw.columns=[c.strip().lower() for c in raw.columns]
     required={'college_code','college_name','city','website'}
     missing=required-set(raw.columns)
@@ -59,6 +78,11 @@ def load_and_reconcile(csv_path, conn):
     return in_db[['institution_code','city','website']],pd.DataFrame(quarantined)
 
 def main():
+    """Apply reviewed institute metadata from an external CSV to matching PostgreSQL institute records.
+
+    Connections: The CLI validates URLs and institute identity, reports quarantined rows, then updates only records that pass reconciliation.
+    """
+
     ap=argparse.ArgumentParser(); ap.add_argument('csv_path',nargs='?',default='data/reference/institute_contacts.csv'); ap.add_argument('--db-url',default=None); args=ap.parse_args()
     csv_path=Path(args.csv_path)
     if not csv_path.exists():sys.exit(f'{csv_path} not found')

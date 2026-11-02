@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Stop the managed service when installed, otherwise stop the PID recorded by the manual launcher.
 PID_FILE="$HOME/.local/state/capfind-local-worker/worker.pid"
 if systemctl --user is-active --quiet capfind-local-worker.service 2>/dev/null; then
   systemctl --user stop capfind-local-worker.service

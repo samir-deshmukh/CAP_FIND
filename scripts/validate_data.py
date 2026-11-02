@@ -83,7 +83,15 @@ ORPHAN_MAP = {
 }
 
 
+# ----------------------------------------------------------------------
+# Filename metadata and row-level cutoff validation
+# ----------------------------------------------------------------------
 def parse_filename(path: Path):
+    """Read the expected course family, year and CAP round from one cutoff CSV filename.
+
+    Connections: main() uses the parsed values to compare file contents with the intended source dataset.
+    """
+
     m = FILENAME_PATTERN.match(path.stem)
     if not m:
         return None
@@ -95,15 +103,14 @@ def parse_filename(path: Path):
 
 
 def forward_fill_block_columns(df: pd.DataFrame) -> tuple[int, list[str]]:
-    """Forward-fill FILL_COLUMNS in place (see that constant's comment for
-    why these columns and not others). Returns (fill_count,
-    first_row_blank_cols) — the latter is non-empty only if some column
-    has no value at all to fill from at row 0, meaning that file cannot
-    be trusted for that column. Shared by validate_data.py and ingest.py
-    so both apply exactly the same rule — a version of this that only
-    lived in the validator was already found once to disagree with what
-    ingest actually did (docs/DECISIONS.md "Second review pass").
+    """Forward-fill FILL_COLUMNS in place and report columns blank at the first row.
+
+    Returns (fill_count, first_row_blank_cols). The latter identifies a field
+    with no earlier value to carry into the first row, so that file cannot be
+    trusted for that field. The validator and ingest path share this helper to
+    apply exactly the same block-context rule.
     """
+
     fill_count = 0
     first_row_blank = []
     for col in FILL_COLUMNS:
@@ -121,12 +128,14 @@ def forward_fill_block_columns(df: pd.DataFrame) -> tuple[int, list[str]]:
 
 
 def is_extraction_anomaly(row) -> bool:
-    """True for rows that, even after forward-filling block context,
-    still have no institution_code/institution_name, or whose category
-    cell is a known non-category text fragment (KNOWN_BAD_CATEGORY_VALUES)
-    — i.e. genuinely broken PDF extraction, not a data-quality "unknown
-    value". Shared by validate_data.py and ingest.py so a row is
-    classified identically by both."""
+    """Identify broken PDF extraction rows after block context is forward-filled.
+
+    A row is anomalous when both institution_code and institution_name remain
+    blank, or when its category cell contains a known non-category text fragment
+    from KNOWN_BAD_CATEGORY_VALUES. This distinguishes extraction damage from
+    an unfamiliar but otherwise valid data value; ingest uses the same rule.
+    """
+
     cat_raw = row['category'].strip().upper()
     return (not row['institution_code'].strip() and not row['institution_name'].strip()) \
         or cat_raw in KNOWN_BAD_CATEGORY_VALUES
@@ -135,11 +144,12 @@ def is_extraction_anomaly(row) -> bool:
 def is_valid_program_identity(row, known_programs: set[str]) -> bool:
     """Accept new CAP branches when their source program code is trustworthy.
 
-    The alias CSV is a normalization/reference aid, not a closed list of
-    every branch the CET Cell may add each year. A clean program name paired
-    with the official-shaped code and source PDF can be staged as a new
-    program. Reject likely column bleed and malformed/missing identities.
+    The alias CSV is a normalization/reference aid, not a closed list of every
+    branch the CET Cell may add. A clean program name paired with an official-
+    shaped code and a source PDF can be staged as a new program. Likely column
+    bleed and malformed or missing identities are rejected.
     """
+
     name = str(row.get('program_name', '')).strip()
     if not name:
         return False
@@ -157,13 +167,12 @@ def is_valid_program_identity(row, known_programs: set[str]) -> bool:
 
 
 def parse_category(raw: str):
+    """Normalize a raw category into (base, is_ladies, section), or return Nones.
+
+    Examples: GOPENH -> ('OPEN', False, 'HU'), LSCS -> ('SC', True, 'SL'),
+    PWDROBCH -> ('PWDROBC', False, 'HU'), and MI -> ('MI', False, 'SL').
     """
-    'GOPENH'   -> ('OPEN',  False, 'HU')
-    'LSCS'     -> ('SC',    True,  'SL')
-    'PWDROBCH' -> ('PWDROBC', False, 'HU')
-    'MI'       -> ('MI',    False, 'SL')
-    Returns (base, is_ladies, section) or (None, None, None).
-    """
+
     if not raw or not raw.strip():
         return None, None, None
     raw = raw.strip().upper()
@@ -200,11 +209,24 @@ def parse_category(raw: str):
 
 
 def hash_rows(df: pd.DataFrame) -> str:
+    """Create a stable hash for normalized cutoff rows, excluding source filename and page provenance.
+
+    Connections: main() compares these hashes across files to report duplicate content.
+    """
+
     cols = [c for c in df.columns if c not in ('source_pdf', 'page')]
     return df[cols].astype(str).sort_values(by=cols).to_csv(index=False)
 
 
+# ----------------------------------------------------------------------
+# Folder-level validation and issue reporting
+# ----------------------------------------------------------------------
 def main(raw_dir: str):
+    """Validate all cutoff CSVs in a folder and report schema, category, program, duplicate and extraction issues.
+
+    Connections: The admin import pipeline runs this as a strict pre-staging gate; a non-zero exit means the artifact needs correction or review.
+    """
+
     folder = Path(raw_dir)
     csvs = sorted(folder.glob('*.csv'))
     if not csvs:
@@ -357,6 +379,11 @@ def main(raw_dir: str):
         print('  \u2713 None')
 
     def report(title, counter):
+        """Print one grouped set of unknown values and their occurrence counts.
+
+        Connections: main() uses this nested helper to keep category, stage, section and program diagnostics consistent.
+        """
+
         print(f'\n=== UNKNOWN {title} ({len(counter)}) ===')
         if not counter:
             print('  \u2713 All recognised')

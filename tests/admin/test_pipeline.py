@@ -1,3 +1,5 @@
+"""Tests for PDF identification, course-family detection, metadata extraction and upload preflight checks."""
+
 import hashlib
 
 import pytest

@@ -1,3 +1,5 @@
+"""Command-line utility for creating a privileged CETFind administrator account."""
+
 import argparse
 import getpass
 
@@ -6,6 +8,10 @@ from .security import ROLES, hash_password
 
 
 def main():
+    """Create one administrator account through the protected role/password setup path.
+
+    Connections: Uses backend.admin.db for schema/database access and backend.admin.security to validate the role and hash the password before storage.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--username", required=True)
     parser.add_argument("--role", choices=sorted(ROLES), default="SUPER_ADMIN")

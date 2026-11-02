@@ -24,8 +24,15 @@ CUTOFF_VALIDATOR = BASE / "scripts" / "validate_data.py"
 SEAT_VALIDATOR = BASE / "scripts" / "validate_seats.py"
 
 
+# ----------------------------------------------------------------------
+# Local extraction validation and file classification
+# ----------------------------------------------------------------------
 def semantic_validate(target: Path, kind: str, source_pdf: Path) -> tuple[int, str]:
-    """Run the same strict data-quality gate used before admin publication."""
+    """Run the strict cutoff or seat-matrix validator against one locally extracted CSV.
+
+    Connections: main() calls this before marking an artifact READY; the same project validation rules are used before admin publication.
+    """
+
     with tempfile.TemporaryDirectory(prefix="capfind-semantic-validation-") as tmp:
         folder = Path(tmp)
         if kind == "CUTOFFS":
@@ -67,6 +74,11 @@ def semantic_validate(target: Path, kind: str, source_pdf: Path) -> tuple[int, s
 
 
 def kind_from_name(name: str) -> str | None:
+    """Classify a local PDF as cutoff data or a seat matrix from its filename.
+
+    Connections: main() uses this to select chunked_cutoff_extractor.py or seat_matrix_extractor.py.
+    """
+
     n = name.lower().replace("-", "_").replace(" ", "_")
     if any(k in n for k in ("seatmatrix", "seat_matrix", "seat_mtx", "_sm", "sm_")):
         return "SEATS"
@@ -74,7 +86,15 @@ def kind_from_name(name: str) -> str | None:
         return "CUTOFFS"
     return None
 
+# ----------------------------------------------------------------------
+# Local batch extraction, audit and ready-to-upload workflow
+# ----------------------------------------------------------------------
 def main() -> int:
+    """Extract PDFs from the local input folder, validate the outputs and prepare only clean CSVs for upload.
+
+    Connections: The operator runs this CLI on a PC; it reuses the production extractors and validators, then writes logs, reports and ready-to-upload artifacts.
+    """
+
     ap = argparse.ArgumentParser(description="Extract CAPFind PDFs locally using the existing pipeline.")
     ap.add_argument("--chunk-pages", type=int, default=10, help="Pages per cutoff chunk (default: 10)")
     ap.add_argument("--hybrid", action="store_true", help="Enable OCR fallback in chunked cutoff extraction")
@@ -234,6 +254,11 @@ def main() -> int:
                     if sorted(page_numbers) != list(range(1, expected_pages + 1)):
                         errors.append(f"page audit coverage mismatch: expected exactly pages 1..{expected_pages}; found {len(page_numbers)} entries and {len(set(page_numbers))} unique pages")
                     def audited_records(a):
+                        """Count the records reported by one page-audit entry across the available extraction methods.
+
+                        Connections: The local batch validator uses this count to detect pages with source values but no extracted rows.
+                        """
+
                         fields = ("native_records", "pdfium_records", "ocr_fallback_records", "camelot_records")
                         if any(field in a for field in fields):
                             return sum(int(a.get(field, 0) or 0) for field in fields)

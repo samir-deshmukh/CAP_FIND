@@ -1,3 +1,5 @@
+"""Tests that staged imports and release ledgers are read in bounded database batches."""
+
 from backend.admin.processing import _iter_staged_rows, _iter_release_items
 
 

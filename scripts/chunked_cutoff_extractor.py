@@ -24,6 +24,11 @@ EXTRACTOR = Path(__file__).with_name("cutoff_extractor.py")
 
 
 def sha256_file(path: Path) -> str:
+    """Calculate the source PDF's SHA-256 hash by reading it in bounded blocks.
+
+    Connections: main() stores this fingerprint in the progress manifest so a resumed run can detect when the input file has changed.
+    """
+
     digest = hashlib.sha256()
     with path.open("rb") as f:
         for block in iter(lambda: f.read(1024 * 1024), b""):
@@ -32,13 +37,22 @@ def sha256_file(path: Path) -> str:
 
 
 def atomic_json(path: Path, payload: Any) -> None:
+    """Write a JSON state/manifest file through a temporary file and atomic rename.
+
+    Connections: The chunk runner uses this for resumable progress so an interrupted write does not corrupt the saved state.
+    """
+
     temp = path.with_suffix(path.suffix + ".tmp")
     temp.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     temp.replace(path)
 
 
 def split_pdf(source: fitz.Document, destination: Path, start: int, end: int) -> None:
-    """Write original zero-based page interval [start, end) as a new PDF."""
+    """Write a zero-based page interval from the original PDF into a separate chunk file.
+
+    Connections: main() creates these chunk PDFs before invoking the existing cutoff_extractor.py on each range.
+    """
+
     chunk = fitz.open()
     try:
         chunk.insert_pdf(source, from_page=start, to_page=end - 1, links=True, annots=True)
@@ -49,6 +63,11 @@ def split_pdf(source: fitz.Document, destination: Path, start: int, end: int) ->
 
 def remap_chunk_artifacts(chunk_out: Path, chunk_stem: str, source_name: str,
                           page_offset: int) -> tuple[Path, Path, Path, int]:
+    """Rename one chunk's output artifacts and convert chunk-local page numbers to original-PDF page numbers.
+
+    Connections: main() calls this after each child extraction so combined CSV/JSON/audit records retain source-page provenance.
+    """
+
     csv_path = chunk_out / f"{chunk_stem}_cutoffs.csv"
     json_path = chunk_out / f"{chunk_stem}_cutoffs.json"
     audit_path = chunk_out / f"{chunk_stem}_page_audit.json"
@@ -89,6 +108,11 @@ def remap_chunk_artifacts(chunk_out: Path, chunk_stem: str, source_name: str,
 
 
 def combine_outputs(outdir: Path, source: Path, parts: list[dict], total_pages: int) -> dict:
+    """Combine completed chunk artifacts into the final CSV, JSON and page-audit outputs.
+
+    Connections: main() calls this after every chunk has been extracted and remapped.
+    """
+
     final_csv = outdir / f"{source.stem}_cutoffs.csv"
     final_json = outdir / f"{source.stem}_cutoffs.json"
     final_audit = outdir / f"{source.stem}_page_audit.json"
@@ -156,6 +180,11 @@ def combine_outputs(outdir: Path, source: Path, parts: list[dict], total_pages: 
 
 
 def main() -> int:
+    """Split a large PDF into bounded page chunks, resume completed work and combine the outputs.
+
+    Connections: The CLI invokes cutoff_extractor.py as a child process for each chunk; the resulting artifacts are consumed by the same validation/import pipeline as a single-PDF extraction.
+    """
+
     # Yield CPU scheduling priority to the web/API process on small shared instances.
     # The nested cutoff extractor inherits this lower priority. This does not change
     # correctness or concurrency; it helps keep admin requests responsive during imports.
@@ -228,6 +257,11 @@ def main() -> int:
     progress_path = control_dir / "progress.json" if str(control_dir) not in ("", ".") else None
 
     def write_progress(state: str, page: int, chunk_number: int, message: str = "") -> None:
+        """Persist the chunk runner's current state, page and chunk number for the UI.
+
+        Connections: The main loop calls this after each chunk so local worker monitoring can display progress and recover after interruption.
+        """
+
         if progress_path is None:
             return
         atomic_json(progress_path, {

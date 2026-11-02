@@ -1,3 +1,5 @@
+"""Tests for supported engineering program aliases and rejection of ungrounded program identities."""
+
 import csv
 from pathlib import Path
 from scripts.validate_data import is_valid_program_identity
