@@ -22,16 +22,28 @@ _CHECKED_OUT_TRACES: dict[int, str] = {}
 
 
 def _track_checkout(dbapi_connection, connection_record, connection_proxy):
+    """Capture where a pooled connection was checked out for diagnostics.
+
+    Connections: SQLAlchemy calls this pool event; _log_pool_exhaustion() reports outstanding checkout traces.
+    """
     with _CHECKOUT_LOCK:
         _CHECKED_OUT_TRACES[id(connection_record)] = "".join(traceback.format_stack(limit=18))
 
 
 def _track_checkin(dbapi_connection, connection_record):
+    """Remove the diagnostic trace when SQLAlchemy returns a connection to the pool.
+
+    Connections: Registered beside _track_checkout() on the shared admin engine.
+    """
     with _CHECKOUT_LOCK:
         _CHECKED_OUT_TRACES.pop(id(connection_record), None)
 
 
 def _log_pool_exhaustion(engine):
+    """Log pool state and outstanding checkout traces after a pool timeout.
+
+    Connections: Connection.__init__() calls this when the SQLAlchemy pool cannot provide a connection.
+    """
     with _CHECKOUT_LOCK:
         traces = list(_CHECKED_OUT_TRACES.values())
     log.error(
@@ -51,6 +63,10 @@ _ENGINE = None
 
 
 def _engine():
+    """Create or return the shared admin SQLAlchemy engine.
+
+    Connections: connect() uses this engine; pool events collect checkout traces for diagnostics.
+    """
     global _ENGINE
     if _ENGINE is not None:
         return _ENGINE
@@ -87,29 +103,37 @@ def _convert_positional(sql: str, params: tuple[Any, ...] | list[Any] | None):
 
 
 class Result:
+    """Expose database rows as dictionaries through the legacy admin DB interface."""
     def __init__(self, result, inserted_id=None):
+        """Wrap a SQLAlchemy result and any ID returned by an INSERT statement."""
         self._result = result
         self._inserted_id = inserted_id
         self.rowcount = result.rowcount
 
     @property
     def lastrowid(self):
+        """Return the inserted row ID captured from PostgreSQL RETURNING id."""
         return self._inserted_id
 
     def fetchone(self):
+        """Fetch one row and expose it as a plain dictionary."""
         row = self._result.fetchone()
         return dict(row._mapping) if row is not None else None
 
     def fetchall(self):
+        """Fetch all remaining rows and expose them as dictionaries."""
         return [dict(r._mapping) for r in self._result.fetchall()]
 
     def __iter__(self):
+        """Iterate over remaining result rows as dictionaries."""
         for row in self._result:
             yield dict(row._mapping)
 
 
 class Connection:
+    """Compatibility wrapper that manages one pooled PostgreSQL connection."""
     def __init__(self):
+        """Open a pooled connection and report pool exhaustion with diagnostics."""
         engine = _engine()
         try:
             self._conn = engine.connect()
@@ -119,9 +143,11 @@ class Connection:
         self._tx = None
 
     def __enter__(self):
+        """Return this connection wrapper for use in a with block."""
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        """Commit on success or roll back on error, then always return the connection to the pool."""
         # Always return the SQLAlchemy connection to the pool, even when
         # commit/rollback itself raises (for example during a DB outage).
         try:
@@ -133,6 +159,10 @@ class Connection:
             self._conn.close()
 
     def execute(self, sql: str, params=()):
+        """Run parameterized SQL after translating supported legacy admin syntax.
+
+        Connections: Admin modules call this wrapper; _convert_positional() converts qmark parameters to SQLAlchemy binds.
+        """
         sql = sql.replace("BEGIN IMMEDIATE", "BEGIN")
         # Support legacy caller SQL safely: INSERT OR IGNORE is translated to
         # PostgreSQL ON CONFLICT DO NOTHING. New PostgreSQL code should use
@@ -169,6 +199,10 @@ class Connection:
         return Result(result)
 
     def executescript(self, sql: str):
+        """Execute a schema script as individual PostgreSQL statements.
+
+        Connections: init_admin_schema() uses this for the public and admin schema files.
+        """
         # PostgreSQL accepts the schema statements individually; comments and
         # blank statements are harmless after splitting on semicolons here.
         for statement in sql.split(";"):
@@ -177,17 +211,27 @@ class Connection:
                 self._conn.exec_driver_sql(statement)
 
     def commit(self):
+        """Commit the current PostgreSQL transaction."""
         self._conn.commit()
 
     def rollback(self):
+        """Roll back the current PostgreSQL transaction."""
         self._conn.rollback()
 
 
 def connect():
+    """Create a context-managed admin database connection.
+
+    Connections: Admin routes and processing modules use this to access the shared PostgreSQL database.
+    """
     return Connection()
 
 
 def init_admin_schema():
+    """Apply the public schema, admin schema and additive compatibility migrations.
+
+    Connections: FastAPI startup calls this before serving requests so admin and public data share one PostgreSQL database.
+    """
     with connect() as c:
         # Migrate this column before running PUBLIC_SCHEMA: on an existing
         # database CREATE TABLE IF NOT EXISTS does not add new columns, while
@@ -230,6 +274,10 @@ def init_admin_schema():
 
 
 def event(c, job_id, event_type, message, progress=None):
+    """Append a timestamped event to one import job's history.
+
+    Connections: Import processing and API handlers call this so the Import Center and Live Processing page can show progress.
+    """
     c.execute(
         "INSERT INTO import_events(job_id,event_type,message,progress) VALUES (?,?,?,?)",
         (job_id, event_type, message, progress),
@@ -237,6 +285,10 @@ def event(c, job_id, event_type, message, progress=None):
 
 
 def update_status(c, job_id, status, message=None):
+    """Persist an import job status and optionally append a matching status event.
+
+    Connections: Pipeline and processing functions use this to keep job state and admin progress history aligned.
+    """
     c.execute("UPDATE import_jobs SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (status, job_id))
     if message:
         event(c, job_id, "STATUS", message)
