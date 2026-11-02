@@ -1642,7 +1642,7 @@ const API_BASE = "https://cetfind-backend.onrender.com";
     localStorage.setItem(ANALYTICS_SESSION_KEY, ANALYTICS_SESSION_ID);
   }
   // Send one allow-listed usage event to the backend analytics endpoint; raw personal details are not included.
-function trackEvent(event, data = {}) {
+  function trackEvent(event, data = {}) {
     try {
       const allowed = ["city","course","result_count","college","year","source"];
       const safe = {};
@@ -2010,7 +2010,7 @@ function enhanceSelect(selectEl, opts = {}) {
     .trim();
 
   // Rebuild the searchable option cache only when the underlying native select options have changed.
-function refreshCache() {
+  function refreshCache() {
     const options = Array.from(selectEl.options);
     const signature = options.map(o => `${o.value}\u0000${o.textContent}`).join("\u0001");
     if (signature === cacheSignature) return;
@@ -2025,7 +2025,7 @@ function refreshCache() {
   }
 
   // Rank matching options and replace the visible dropdown list in one DOM update.
-function rebuildList(filter) {
+  function rebuildList(filter) {
     const f = normalize(filter);
     const selected = selectEl.value;
 
@@ -2074,12 +2074,12 @@ function rebuildList(filter) {
   }
 
   // Keep the custom dropdown's visible options synchronized with the current search filter.
-function renderOptions(filter) {
+  function renderOptions(filter) {
     rebuildList(filter);
   }
 
   // Mirror the native select's selected value and disabled state into the custom dropdown button.
-function sync() {
+  function sync() {
     const opt = selectEl.options[selectEl.selectedIndex];
     const placeholderText = selectEl === citySelect ? "Select City" : "Select Course";
     btn.textContent = opt ? opt.textContent : placeholderText;
@@ -2092,7 +2092,7 @@ function sync() {
   }
 
   // Open the custom option panel and update its accessibility state.
-function open() {
+  function open() {
     if (selectEl.disabled) return;
     refreshCache();
     const buttonRect = btn.getBoundingClientRect();
@@ -2113,7 +2113,7 @@ function open() {
   }
 
   // Close the custom option panel and restore focus to its trigger when appropriate.
-function close() {
+  function close() {
     wrap.classList.remove("open", "open-up");
     btn.setAttribute("aria-expanded", "false");
   }
@@ -2734,7 +2734,7 @@ async function loadHeroStats() {
 function animateCounter(el, target, duration = 1400) {
   const start = performance.now();
   // Advance one animation frame and stop scheduling frames once the target number is reached.
-function tick(now) {
+  function tick(now) {
     const progress = Math.min((now - start) / duration, 1);
     const eased = 1 - Math.pow(1 - progress, 3);   /* ease-out cubic */
     el.textContent = Math.floor(eased * target);
@@ -2800,7 +2800,7 @@ function createTrendsController(ids) {
   /* ── DOM refs ── */
   const els = {};
   // Resolve the controller's role-to-element ID map into DOM references for this widget instance.
-function bindEls() {
+  function bindEls() {
     Object.keys(ids).forEach(role => {
       if (role === "mode") return;   // "mode" is a flag, not a DOM id
       els[role] = document.getElementById(ids[role]);
@@ -2870,7 +2870,7 @@ function bindEls() {
   }
 
   // Return the cached course dataset currently selected by this trends controller.
-function currentData() {
+  function currentData() {
     return cache.get(state.course);
   }
 
@@ -2879,24 +2879,24 @@ function currentData() {
     return data.groups.filter(g => String(g.branch) === String(branchId));
   }
   // Narrow trend groups to the selected college within the chosen branch.
-function groupsForCollege(data, branchId, collegeCode) {
+  function groupsForCollege(data, branchId, collegeCode) {
     return groupsForBranch(data, branchId).filter(g => g.college === collegeCode);
   }
   // Find trend groups for the selected college without requiring a branch selection.
-function groupsForCollegeAnyBranch(data, collegeCode) {
+  function groupsForCollegeAnyBranch(data, collegeCode) {
     return data.groups.filter(g => g.college === collegeCode);
   }
   // Keep only trend groups matching the selected ladies/general seat type.
-function groupsForLadies(data, branchId, collegeCode, ladies) {
+  function groupsForLadies(data, branchId, collegeCode, ladies) {
     return groupsForCollege(data, branchId, collegeCode).filter(g => g.ladies === ladies);
   }
   // Keep only trend groups matching the selected reservation category.
-function groupsForCategory(data, branchId, collegeCode, ladies, category) {
+  function groupsForCategory(data, branchId, collegeCode, ladies, category) {
     return groupsForLadies(data, branchId, collegeCode, ladies).filter(g => g.category === category);
   }
 
   // Remove duplicate values while preserving the first occurrence order.
-function uniqueBy(arr, keyFn, labelFn) {
+  function uniqueBy(arr, keyFn, labelFn) {
     const seen = new Map();
     arr.forEach(item => { const k = keyFn(item); if (!seen.has(k)) seen.set(k, labelFn(item)); });
     return [...seen.entries()]
@@ -2913,7 +2913,7 @@ function uniqueBy(arr, keyFn, labelFn) {
   }
 
   // Rebuild the college selector after the course or branch selection changes.
-function rebuildColleges() {
+  function rebuildColleges() {
     const data = currentData();
     if (!state.branch) { populateSelect(els.tCollege, [], "Select branch first"); return; }
     const items = uniqueBy(groupsForBranch(data, state.branch), g => g.college, g => data.colleges[g.college] || g.college);
@@ -2922,7 +2922,7 @@ function rebuildColleges() {
 
 
   // Show or hide the ladies-seat filter based on the selected dataset's available groups.
-function rebuildLadiesToggle() {
+  function rebuildLadiesToggle() {
     const data = currentData();
     if (!state.college) { els.tLadies.disabled = true; els.tLadies.checked = false; state.ladies = false; return; }
     const rows = ids.mode === "drawer"
@@ -2934,12 +2934,12 @@ function rebuildLadiesToggle() {
   }
 
   // Return the compact metadata needed to build the drawer's category and quota filters.
-function drawerMeta() {
+  function drawerMeta() {
     return state.drawerOptions || null;
   }
 
   // Rebuild category choices using metadata scoped to the currently selected college.
-function rebuildDrawerCategories() {
+  function rebuildDrawerCategories() {
     const meta = drawerMeta();
     if (!meta) { populateSelect(els.tCategory, [], "No categories with data for this college"); return; }
     const items = (meta.c && meta.c[state.ladies ? "1" : "0"]) || [];
@@ -2949,7 +2949,7 @@ function rebuildDrawerCategories() {
   }
 
   // Rebuild quota choices using metadata scoped to the selected college and category.
-function rebuildDrawerQuotas() {
+  function rebuildDrawerQuotas() {
     const meta = drawerMeta();
     if (!meta || !state.category) { populateSelect(els.tQuota, [], "Select category first"); return; }
     const cats = (meta.c && meta.c[state.ladies ? "1" : "0"]) || [];
@@ -2960,7 +2960,7 @@ function rebuildDrawerQuotas() {
   }
 
   // Rebuild the category selector for the current course, branch and college filters.
-function rebuildCategories() {
+  function rebuildCategories() {
     const data = currentData();
     if (!state.college) { populateSelect(els.tCategory, [], "Select college first"); return; }
     const rows = ids.mode === "drawer"
@@ -2972,7 +2972,7 @@ function rebuildCategories() {
   }
 
   // Rebuild the quota selector after the category or college selection changes.
-function rebuildQuotas() {
+  function rebuildQuotas() {
     const data = currentData();
     if (!state.college || !state.category) { populateSelect(els.tQuota, [], "Select category first"); return; }
     const rows = ids.mode === "drawer"
@@ -2984,7 +2984,7 @@ function rebuildQuotas() {
   }
 
   // Return the trend groups that match the controller's current filter state.
-function findGroups() {
+  function findGroups() {
     const data = currentData();
     if (!data || !state.college || !state.category || !state.quota) return [];
     if (ids.mode === "drawer") {
@@ -3014,7 +3014,7 @@ function findGroups() {
     : "<strong>No data yet</strong>Pick a course, college, category and quota/type above to see the cutoff data.";
 
   // Display a consistent empty or unavailable state in the trends widget.
-function showEmpty(message) {
+  function showEmpty(message) {
     els.trendsTable.style.display = "none";
     els.trendsTable.innerHTML = "";
     els.trendsLoading.style.display = "none";
@@ -3085,7 +3085,7 @@ function showEmpty(message) {
   }
 
   // Calculate and display compact highest, lowest and year-over-year insights for the selected trend.
-function renderInsights(points, years) {
+  function renderInsights(points, years) {
     const highest = points.reduce((a, b) => (b.percentile > a.percentile ? b : a));
     const lowest = points.reduce((a, b) => (b.percentile < a.percentile ? b : a));
     els.tinHighest.textContent = `${highest.percentile.toFixed(2)}% (${highest.year} · R${highest.round})`;
@@ -3116,7 +3116,7 @@ function renderInsights(points, years) {
   }
 
   // Escape source-derived text before inserting it into HTML generated by this frontend.
-function escapeHtml(value) {
+  function escapeHtml(value) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -3376,7 +3376,7 @@ function escapeHtml(value) {
     DEF: "DEF"
   };
   // Group the source-ordered seat rows by their category for table rendering.
-function seatRowsByCategory(rows) {
+  function seatRowsByCategory(rows) {
     // The API returns rows in source-PDF order. Do not sort or whitelist the
     // category names here: that used to hide valid categories and reorder the
     // official table.
@@ -3384,7 +3384,7 @@ function seatRowsByCategory(rows) {
   }
 
   // Recreate the official PDF course-summary header from metadata returned by the seat API.
-function seatPdfHeaderHtml(collegeName, course, code, choiceCount, metadata) {
+  function seatPdfHeaderHtml(collegeName, course, code, choiceCount, metadata) {
     const meta = metadata || {};
     const summary = meta.summary_fields && typeof meta.summary_fields === "object"
       ? Object.entries(meta.summary_fields) : [];
@@ -3418,7 +3418,7 @@ function seatPdfHeaderHtml(collegeName, course, code, choiceCount, metadata) {
   }
 
   // Build the seat allocation table from the backend's normalized seat-matrix payload.
-function seatMatrixTableHtml(allocs) {
+  function seatMatrixTableHtml(allocs) {
     const entries = Object.entries(allocs);
     const categories = [];
     const seen = new Set();
@@ -3461,7 +3461,7 @@ function seatMatrixTableHtml(allocs) {
   }
 
   // Build the choice-code selector section for the currently selected engineering program.
-function seatMatrixChoiceHtml(course, code, allocs, collegeName, choiceCount, metadata) {
+  function seatMatrixChoiceHtml(course, code, allocs, collegeName, choiceCount, metadata) {
     return `
       <section class="seat-pdf-card">
         ${seatPdfHeaderHtml(collegeName, course, code, choiceCount, metadata)}
@@ -3616,7 +3616,7 @@ function seatMatrixChoiceHtml(course, code, allocs, collegeName, choiceCount, me
   }
 
   // Load filter metadata, populate controls and render the initial trends or seat-matrix view.
-function init() {
+  function init() {
     bindEls();
     wire();
     /* Same searchable-dropdown component as City/Course above, so
@@ -3744,7 +3744,7 @@ function init() {
   }
 
   // Rebuild the drawer's ladies-seat control from the selected college's available metadata.
-function rebuildLadiesToggleFromMeta() {
+  function rebuildLadiesToggleFromMeta() {
     const meta = drawerMeta();
     const hasLadies = !!(meta && meta.c && meta.c["1"] && meta.c["1"].length);
     els.tLadies.disabled = !hasLadies;
@@ -3790,7 +3790,7 @@ let drawerTrends = null;
   const feedbackModal=document.getElementById("feedbackModal"),feedbackOpen=document.getElementById("feedbackOpen"),feedbackClose=document.getElementById("feedbackClose"),feedbackCancel=document.getElementById("feedbackCancel"),feedbackMessage=document.getElementById("feedbackMessage"),feedbackStatus=document.getElementById("feedbackStatus"),feedbackSubmit=document.getElementById("feedbackSubmit"),feedbackRating=document.getElementById("feedbackRating"),feedbackWebsite=document.getElementById("feedbackWebsite");
   let feedbackScore=null;
   // Close the feedback panel and restore the page's normal interaction state.
-function closeFeedback(){feedbackModal.classList.remove("open");feedbackModal.setAttribute("aria-hidden","true");}
+  function closeFeedback(){feedbackModal.classList.remove("open");feedbackModal.setAttribute("aria-hidden","true");}
   feedbackOpen.addEventListener("click",()=>{feedbackModal.classList.add("open");feedbackModal.setAttribute("aria-hidden","false");feedbackStatus.textContent="";setTimeout(()=>feedbackMessage.focus(),0)});
   feedbackClose.addEventListener("click",closeFeedback);feedbackCancel.addEventListener("click",closeFeedback);
   feedbackModal.addEventListener("click",e=>{if(e.target===feedbackModal)closeFeedback()});
