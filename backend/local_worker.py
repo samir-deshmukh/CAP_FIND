@@ -175,9 +175,12 @@ def _remote_get(state: dict, suffix: str):
 
 
 def _wait_for_server_staging(state: dict) -> dict:
-    """Keep the worker job active until the backend finishes validating and staging its extracted artifact.
+    """Keep the single-job worker queue occupied until server staging finishes.
 
-    Connections: _finish_server_staging() uses this poll loop before releasing the local worker slot.
+    Artifact receipt is asynchronous on the backend. Starting another PDF as
+    soon as upload returns would overlap extraction with server staging and
+    retain multiple large sets of temporary files at once. This poll loop
+    releases the worker slot only after staging reaches a terminal status.
     """
 
     while True:
@@ -216,9 +219,12 @@ def _cleanup_extraction_outputs(outdir: Path, keep_artifact: Path) -> None:
 
 
 def _finish_server_staging(state: dict) -> None:
-    """Wait for the backend staging result, then clean up local extraction outputs and finalize worker state.
+    """Wait for server staging, keep progress/heartbeat current, then finalize the job.
 
-    Connections: The queue loop calls this after the artifact has been uploaded to the backend.
+    The extractor may spend time on PDF metadata or OCR without producing a
+    page-progress file. The worker continues notifying the backend during
+    those intervals, then cleans local intermediates after the staging result
+    is known.
     """
 
     result = _wait_for_server_staging(state)
