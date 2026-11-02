@@ -543,6 +543,23 @@ select.ssel-native { display: none; }
   border-radius: 0 0 16px 16px;   /* rounded bottom only */
   overflow-x: auto;              /* horizontal scroll on narrow screens */
 }
+.results-pagination {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px; margin-top: 16px;
+}
+.results-pagination[hidden] { display: none; }
+.results-pagination button {
+  padding: 10px 16px; border: 1px solid rgba(232,232,228,0.9);
+  border-radius: 10px; background: var(--paper-50); color: var(--ink-900);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .18s, border-color .18s;
+}
+.results-pagination button:hover:not(:disabled) { background: var(--ink-900); color: var(--paper-50); border-color: var(--ink-900); }
+.results-pagination button:disabled { opacity: .4; cursor: not-allowed; }
+.results-pagination span { color: var(--paper-700); font-size: 13px; text-align: center; }
+@media (max-width: 520px) {
+  .results-pagination { justify-content: center; }
+  .results-pagination span { order: -1; width: 100%; }
+}
 table { width: 100%; border-collapse: collapse; min-width: 760px; }
 
 thead th {                          /* table header row */
@@ -1550,6 +1567,7 @@ footer .footer-grid { border-top-color:#444444!important; }
             <tbody id="resultsBody"></tbody>
           </table>
         </div>
+        <nav class="results-pagination" id="resultsPagination" aria-label="College result pages" hidden></nav>
       </div>
     </div>
   </section>
@@ -1673,7 +1691,7 @@ const CONFIG = {
         that fetch resolves. The first item is always the empty
         "please choose" placeholder — it is NOT a valid filter value,
         so the results list stays empty until the person actively
-        picks both a city and a course (see getFiltered()). ── */
+        picks both a city and a course and enters a valid percentile. ── */
   cityOptions:   [{ value: "", label: "Select City" }],
   courseOptions: [{ value: "", label: "Select Course" }],
 
@@ -2169,6 +2187,7 @@ const citySelect   = $("citySelect");
 const courseSelect = $("courseSelect");
 const pctInput     = $("pctInput");
 const resultsBody  = $("resultsBody");
+const resultsPagination = $("resultsPagination");
 const resultCount  = $("resultCount");
 const resultLabel  = $("resultLabel");
 const drawer       = $("drawer");
@@ -2181,6 +2200,9 @@ const drawerEyebrow= $("drawerEyebrow");
 /* ── Live state ── */
 let currentSort = CONFIG.defaultSort;      /* which sort chip is active */
 let currentPct  = CONFIG.defaultPercentile;/* the user's percentile */
+const SEARCH_PAGE_SIZE = 10;
+let currentSearchPage = 1;
+let totalSearchResults = 0;
 let openId      = null;                    /* id of the college whose slide is open */
 let swapTimer   = null;                    /* timeout handle used to swap slides cleanly */
 
@@ -2256,8 +2278,8 @@ async function loadRealCollegeData() {
      - at/above the LOWEST cutoff on file   → borderline (cleared the
        easiest round on file, but not every round)
    A college where the person doesn't even clear the lowest cutoff is
-   not eligible at all — see getFiltered(), which excludes it before
-   this function is ever called for that college. */
+   not eligible at all — the search API excludes it before this
+   function is ever called for that college. */
 function getStatus(userPct, lo, hi) {
   if (userPct >= hi) return { key: "safe", label: CONFIG.statusLabels.safe };
   if (userPct >= lo) return { key: "borderline", label: CONFIG.statusLabels.borderline };
@@ -2268,9 +2290,8 @@ function getStatus(userPct, lo, hi) {
    The highest and lowest cutoff percentile on file for this college,
    across every year/round in its history (falls back to just its
    current percentile if there's no history at all). This is the
-   basis for both eligibility (getFiltered) and the "chance of
-   admission" status (getStatus): the LOW end is the easiest bar this
-   college has ever had, the HIGH end is the toughest. */
+   basis for the "chance of admission" status (getStatus): the LOW end
+   is the easiest bar this college has ever had, the HIGH end is the toughest. */
 function percentileRange(c) {
   const hist = getHistory(c);
   const highs = hist.map(h => Number.isFinite(Number(h.high)) ? Number(h.high) : Number(h.percentile));
@@ -2280,55 +2301,35 @@ function percentileRange(c) {
   return { hi: Math.max(...highs), lo: Math.min(...lows) };
 }
 
-/* ── getFiltered() ──
-   Reads the City / Course dropdowns + currentSort, then returns the
-   filtered and sorted array of ELIGIBLE colleges — i.e. colleges
-   whose lowest historical cutoff the person's percentile actually
-   clears. A college where even its easiest-ever cutoff is out of
-   reach is not eligible and is left out entirely (rather than shown
-   and just labelled "reach"), so 52% never surfaces a college that
-   has only ever closed in the 90s. */
-function getFiltered() {
-  const city   = citySelect.value;
-  const course = courseSelect.value;
-
-  /* Nothing shows until the person has explicitly picked a city, a
-     course, AND typed a valid percentile — no defaults, no "All"
-     wildcard, so there is never a moment where the table is silently
-     populated (and clickable) before the person has actually searched. */
-  if (city === CONFIG.unselected || course === CONFIG.unselected || currentPct === null) {
-    return [];
+function renderResultsPagination() {
+  const totalPages = Math.ceil(totalSearchResults / SEARCH_PAGE_SIZE);
+  if (totalPages <= 1) {
+    resultsPagination.hidden = true;
+    resultsPagination.innerHTML = "";
+    return;
   }
 
-  let list = CONFIG.colleges.filter(c => c.city === city && c.course === course);
-
-  /* Eligibility: the person's percentile must clear (be >=) this
-     college's LOWEST cutoff on file. */
-  list = list.filter(c => currentPct >= percentileRange(c).lo);
-
-  if (currentSort === "rank") list.sort((a, b) => a.cutoff - b.cutoff);       /* lower rank number = more competitive, shown first */
-  else                        list.sort((a, b) => b.percentile - a.percentile); /* "percentile" (default) */
-
-  return list;
+  const firstResult = (currentSearchPage - 1) * SEARCH_PAGE_SIZE + 1;
+  const lastResult = Math.min(currentSearchPage * SEARCH_PAGE_SIZE, totalSearchResults);
+  resultsPagination.hidden = false;
+  resultsPagination.innerHTML = `
+    <button type="button" data-page="${currentSearchPage - 1}" aria-label="Previous page" ${currentSearchPage <= 1 ? "disabled" : ""}>← Previous</button>
+    <span aria-live="polite">Showing ${firstResult}–${lastResult} of ${totalSearchResults} · Page ${currentSearchPage} of ${totalPages}</span>
+    <button type="button" data-page="${currentSearchPage + 1}" aria-label="Next page" ${currentSearchPage >= totalPages ? "disabled" : ""}>Next →</button>`;
 }
 
-// Build the visible result rows from the already-filtered college list.
+// Build the visible result rows from the current API page and keep the count global.
 function renderResultsTable() {
-  const list = getFiltered();
+  const list = CONFIG.colleges;
   const searched = citySelect.value !== CONFIG.unselected &&
                     courseSelect.value !== CONFIG.unselected &&
                     currentPct !== null;
 
-  /* Update the "42 colleges match" text */
-  resultCount.textContent = list.length;
-  resultLabel.textContent = list.length === 1
+  resultCount.textContent = searched ? totalSearchResults : 0;
+  resultLabel.textContent = totalSearchResults === 1
     ? "college matches your profile"
     : "colleges match your profile";
 
-  /* Nothing searched yet → prompt, not an empty result. No <tr> is
-     rendered at all here (not even a data-id-less placeholder row),
-     so there is nothing in the table for a click to accidentally land
-     on and open a slide before a real search has happened. */
   if (!searched) {
     resultsBody.innerHTML = `
       <tr class="no-row"><td colspan="4">
@@ -2337,10 +2338,11 @@ function renderResultsTable() {
           <p>Pick a city, a course, and type your percentile above.</p>
         </div>
       </td></tr>`;
+    resultsPagination.hidden = true;
+    resultsPagination.innerHTML = "";
     return;
   }
 
-  /* Empty state — a real search that matched nothing */
   if (!list.length) {
     resultsBody.innerHTML = `
       <tr class="no-row"><td colspan="4">
@@ -2349,11 +2351,12 @@ function renderResultsTable() {
           <p>Try a different city or course, or adjusting your percentile.</p>
         </div>
       </td></tr>`;
+    resultsPagination.hidden = true;
+    resultsPagination.innerHTML = "";
     return;
   }
 
-  /* Build one <tr> per college */
-  resultsBody.innerHTML = list.map((c, i) => {
+  resultsBody.innerHTML = list.map(c => {
     const { hi, lo } = percentileRange(c);
     const st = getStatus(currentPct, lo, hi);
     return `
@@ -2370,15 +2373,22 @@ function renderResultsTable() {
         </td>
       </tr>`;
   }).join("");
+
+  renderResultsPagination();
 }
 
 let searchTimer = null;
 let searchRequest = null;
 let searchSequence = 0;
 
-// Recalculate eligible colleges and refresh the results count, empty state and table.
-function renderResults() {
+// Fetch one database-paginated page; filter and sort changes start again at page one.
+function renderResults(page = 1) {
   clearTimeout(searchTimer);
+  resultsPagination.hidden = true;
+  const seq = ++searchSequence;
+  if (searchRequest) searchRequest.abort();
+  searchRequest = null;
+  currentSearchPage = page;
   const city = citySelect.value;
   const course = courseSelect.value;
   const searched = city !== CONFIG.unselected &&
@@ -2387,13 +2397,13 @@ function renderResults() {
 
   if (!searched) {
     CONFIG.colleges = [];
+    totalSearchResults = 0;
+    currentSearchPage = 1;
     renderResultsTable();
     return;
   }
 
   searchTimer = setTimeout(async () => {
-    const seq = ++searchSequence;
-    if (searchRequest) searchRequest.abort();
     searchRequest = new AbortController();
 
     try {
@@ -2402,8 +2412,8 @@ function renderResults() {
         percentile: String(currentPct),
         city,
         sort: currentSort === "rank" ? "rank" : "comp",
-        page: "1",
-        page_size: "50"
+        page: String(page),
+        page_size: String(SEARCH_PAGE_SIZE)
       });
       const response = await fetch(`${API_BASE}/api/search?` + params.toString(), {
         headers: { "Accept": "application/json" },
@@ -2413,15 +2423,28 @@ function renderResults() {
       const payload = await response.json();
       if (seq !== searchSequence) return;
       CONFIG.colleges = Array.isArray(payload.results) ? payload.results : [];
+      totalSearchResults = Number.isFinite(Number(payload.total)) ? Number(payload.total) : 0;
+      currentSearchPage = Number(payload.page) || page;
       renderResultsTable();
     } catch (err) {
       if (err.name === "AbortError") return;
       console.error("Could not load college search results:", err);
       CONFIG.colleges = [];
+      totalSearchResults = 0;
       renderResultsTable();
     }
   }, 180);
 }
+
+resultsPagination.addEventListener("click", event => {
+  const button = event.target.closest("button[data-page]");
+  if (!button || button.disabled) return;
+  const nextPage = Number(button.dataset.page);
+  const totalPages = Math.ceil(totalSearchResults / SEARCH_PAGE_SIZE);
+  if (Number.isInteger(nextPage) && nextPage >= 1 && nextPage <= totalPages) {
+    renderResults(nextPage);
+  }
+});
 
 /* ── Click on any row in the results table ──
    Uses event delegation: one listener handles all rows, even the
@@ -2576,8 +2599,8 @@ const pctCaption = $("pctCaption");
 
 /* ── setPercentile(value) ──
    Only ever stores a genuinely valid 0–100 percentile in state;
-   anything else leaves currentPct at null so getFiltered() keeps the
-   results list empty rather than showing a stale/incorrect match. */
+   anything else leaves currentPct at null so renderResults() clears
+   the search results rather than showing a stale or incorrect match. */
 function setPercentile(value) {
   if (isValidPercentile(value)) {
     currentPct = parseFloat(value);
