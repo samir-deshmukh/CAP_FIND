@@ -1,3 +1,5 @@
+"""Tests for startup recovery of expired imports while preserving staged rows for admin review."""
+
 from __future__ import annotations
 
 from pathlib import Path
