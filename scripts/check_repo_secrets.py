@@ -8,18 +8,21 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+# Scan text-like source/configuration files inside the repository root.
 ROOT = Path(__file__).resolve().parents[1]
 IGNORED_DIRS = {".git", ".venv", "venv", "__pycache__", ".pytest_cache", ".mypy_cache"}
 TEXT_EXTENSIONS = {
     ".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".md", ".txt", ".toml",
     ".yaml", ".yml", ".json", ".ini", ".cfg", ".conf", ".sql", ".sh"
 }
+# Common accidental credential formats; GitHub secret scanning remains the history-aware check.
 PATTERNS = [
     re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"),
     re.compile(r"(?i)\b(?:api[_-]?key|secret[_-]?key|access[_-]?token)\s*[:=]\s*['\"][A-Za-z0-9_\-./+=]{16,}['\"]"),
     re.compile(r"(?i)postgres(?:ql)?://[^\s/'\"]+:[^\s/'\"]+@"),
     re.compile(r"(?i)\b(?:password|passwd|pwd)\s*=\s*['\"][^'\"]{8,}['\"]"),
 ]
+# Walk the repository, skip generated environments and collect matching paths.
 findings: list[str] = []
 for path in ROOT.rglob("*"):
     if not path.is_file() or any(part in IGNORED_DIRS for part in path.parts):
@@ -34,6 +37,7 @@ for path in ROOT.rglob("*"):
         if pattern.search(text):
             findings.append(f"{path.relative_to(ROOT)} matches {pattern.pattern}")
 
+# Fail the command when any candidate secret pattern is found.
 if findings:
     print("Potential secret(s) detected:")
     print("\n".join(findings))
