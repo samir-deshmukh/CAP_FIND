@@ -67,13 +67,26 @@ app.add_middleware(
 )
 
 
+# ----------------------------------------------------------------------
+# Local worker request checks and durable job state
+# ----------------------------------------------------------------------
 def _origin_ok(request: Request) -> None:
+    """Validate that a local worker request comes from an allowed browser origin.
+
+    Connections: The loopback worker API calls this before accepting browser actions; it does not use Origin as a replacement for backend job-token checks.
+    """
+
     origin = request.headers.get("origin", "")
     if origin not in ALLOWED_ORIGINS:
         raise HTTPException(403, "Origin is not allowed to use the CAPFind local worker")
 
 
 def _backend_ok(value: str) -> str:
+    """Validate the configured CAPFind backend URL against the worker's allowed host list.
+
+    Connections: Remote worker requests call this before sending job tokens or source artifacts to the backend.
+    """
+
     parsed = urlparse(value)
     if parsed.scheme != "https" and not (
         parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1"}
@@ -85,6 +98,11 @@ def _backend_ok(value: str) -> str:
 
 
 def _write_state(job_id: int, state: dict) -> None:
+    """Atomically save one local job's state file and update the in-memory job record.
+
+    Connections: The worker uses this after progress, status and control changes so state can be recovered after a process restart.
+    """
+
     folder = DATA / f"job_{job_id}"
     folder.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(folder, 0o700)
@@ -96,6 +114,11 @@ def _write_state(job_id: int, state: dict) -> None:
 
 
 def _load_state(job_id: int) -> dict:
+    """Load one job's persisted state under the worker lock.
+
+    Connections: HTTP routes and the queue loop use this to make decisions from the saved job record.
+    """
+
     with LOCK:
         state = JOBS.get(job_id)
         if state:
@@ -108,7 +131,15 @@ def _load_state(job_id: int) -> dict:
         return state
 
 
+# ----------------------------------------------------------------------
+# Authenticated communication with the CAPFind backend
+# ----------------------------------------------------------------------
 def _remote(state: dict, suffix: str, *, payload=None, files=None, data=None):
+    """Send an authenticated POST request for one job to the CAPFind backend.
+
+    Connections: Progress, artifact upload and job-control helpers use this client to communicate with the server-side local-import API.
+    """
+
     url = state["backend_url"] + f"/admin/api/local-imports/{state['job_id']}/{suffix}"
     response = requests.post(
         url,
@@ -126,6 +157,11 @@ def _remote(state: dict, suffix: str, *, payload=None, files=None, data=None):
 
 
 def _remote_get(state: dict, suffix: str):
+    """Send an authenticated GET request for one job to the CAPFind backend.
+
+    Connections: The worker uses this to poll server staging and retrieve job status without exposing the worker token to the browser.
+    """
+
     url = state["backend_url"] + f"/admin/api/local-imports/{state['job_id']}/{suffix}"
     response = requests.get(
         url, headers={"Authorization": "Bearer " + state["upload_token"]},
@@ -139,12 +175,11 @@ def _remote_get(state: dict, suffix: str):
 
 
 def _wait_for_server_staging(state: dict) -> dict:
-    """Keep the single-job worker queue occupied through server staging.
+    """Keep the worker job active until the backend finishes validating and staging its extracted artifact.
 
-    Artifact receipt is asynchronous on the server. Starting the next PDF as
-    soon as the upload returns lets extraction overlap with staging and keeps
-    multiple large sets of temporary files alive at once.
+    Connections: _finish_server_staging() uses this poll loop before releasing the local worker slot.
     """
+
     while True:
         try:
             result = _remote_get(state, "status")
@@ -163,7 +198,11 @@ def _wait_for_server_staging(state: dict) -> dict:
 
 
 def _cleanup_extraction_outputs(outdir: Path, keep_artifact: Path) -> None:
-    """Remove extractor intermediates but retain the source and retry CSV."""
+    """Remove temporary extractor files while retaining the original source and retry artifact.
+
+    Connections: The worker calls this after server staging completes so intermediates do not accumulate on the local computer.
+    """
+
     keep = keep_artifact.absolute()
     for child in outdir.iterdir():
         if child.absolute() == keep:
@@ -177,6 +216,11 @@ def _cleanup_extraction_outputs(outdir: Path, keep_artifact: Path) -> None:
 
 
 def _finish_server_staging(state: dict) -> None:
+    """Wait for the backend staging result, then clean up local extraction outputs and finalize worker state.
+
+    Connections: The queue loop calls this after the artifact has been uploaded to the backend.
+    """
+
     result = _wait_for_server_staging(state)
     status = str(result.get("status") or "").upper()
     artifact_value = str(state.get("artifact_path") or "")
@@ -203,15 +247,33 @@ def _finish_server_staging(state: dict) -> None:
 
 
 def _status(state: dict, status: str, message: str, **extra):
+    """Update a job's status/message fields and persist the new state.
+
+    Connections: Worker routes, progress monitors and queue handlers use this shared state writer.
+    """
+
     state.update({"status": status, "message": message, "updated_at": time.time(), **extra})
     _write_state(state["job_id"], state)
 
 
 def _progress(state: dict, page: int, total: int, worker_state: str = "RUNNING"):
+    """Send page progress to the backend and keep the local job state current.
+
+    Connections: The extraction process calls this as pages are processed; the Import Center displays the server-recorded progress.
+    """
+
     _remote(state, "progress", payload={"page": page, "total": total, "state": worker_state})
 
 
+# ----------------------------------------------------------------------
+# Single-job extraction, progress reporting and recovery
+# ----------------------------------------------------------------------
 def _process_job(job_id: int):
+    """Run extraction for one local or remotely claimed PDF job and send the resulting artifact to CAPFind.
+
+    Connections: The single-job queue calls this; backend.main receives the CSV and runs the normal validation/staging pipeline.
+    """
+
     global ACTIVE_JOB
     state = _load_state(job_id)
     folder = DATA / f"job_{job_id}"
@@ -315,7 +377,11 @@ def _process_job(job_id: int):
 
 
 def _monitor_job_progress(state: dict, control: Path, stop: threading.Event) -> None:
-    """Keep the server informed even while PDF metadata/OCR has no page file yet."""
+    """Keep the backend informed while the extractor is working, including periods without a page-progress file.
+
+    Connections: _process_job() starts this monitor so the server-side job does not appear stalled during metadata/OCR work.
+    """
+
     last_sent = 0.0
     while not stop.wait(1.0):
         progress_path = control / "progress.json"
@@ -349,6 +415,11 @@ def _monitor_job_progress(state: dict, control: Path, stop: threading.Event) -> 
 
 
 def _recover_jobs():
+    """Restore unfinished job state from the private local-worker data directory after a restart.
+
+    Connections: startup() calls this before the queue loop begins so interrupted jobs can be resumed or reported accurately.
+    """
+
     for path in sorted(DATA.glob("job_*/job.json")):
         try:
             state = json.loads(path.read_text(encoding="utf-8"))
@@ -381,11 +452,21 @@ def _recover_jobs():
 
 @app.on_event("startup")
 def startup():
+    """Recover saved jobs and start the background queue thread.
+
+    Connections: FastAPI invokes this on worker startup; the queue then processes local jobs and claims remote jobs.
+    """
+
     _recover_jobs()
     threading.Thread(target=_queue_loop, daemon=True, name="capfind-local-queue").start()
 
 
 def _queue_loop():
+    """Run the single-job queue and select the next eligible local or remote job.
+
+    Connections: startup() starts this loop; it serializes extraction and keeps completed server-staging jobs from being claimed twice.
+    """
+
     global ACTIVE_JOB
     next_remote_poll = 0.0
     while True:
@@ -426,6 +507,11 @@ def _queue_loop():
 
 
 def _claim_remote_job() -> bool:
+    """Claim one queued source PDF from the CAPFind backend and prepare its local job state.
+
+    Connections: The queue loop calls this when remote-worker mode is configured; the backend grants a job lease and source-download capability.
+    """
+
     backend_url = os.getenv("CAPFIND_BACKEND_URL", "https://cetfind.onrender.com").strip().rstrip("/")
     worker_token = os.getenv("CAPFIND_REMOTE_WORKER_TOKEN", "").strip()
     if not worker_token:
@@ -464,6 +550,11 @@ def _claim_remote_job() -> bool:
     lease_stop = threading.Event()
 
     def keep_lease():
+        """Renew the remote worker lease and maintain the source download while a job is active.
+
+        Connections: _process_job() runs this in a helper thread so the backend does not reassign a live job.
+        """
+
         while not lease_stop.wait(20):
             try:
                 _remote_get(state, "status")
@@ -515,7 +606,15 @@ def _claim_remote_job() -> bool:
 
 
 @app.get("/health")
+# ----------------------------------------------------------------------
+# Local worker HTTP status and job-control routes
+# ----------------------------------------------------------------------
 def health():
+    """Return a compact health and active-job summary for the local worker.
+
+    Connections: The Import Center's worker-status panel reads this local endpoint to show whether extraction is available.
+    """
+
     with LOCK:
         return {"ok": True, "worker": "CAPFind Local Extraction Worker", "active_job": ACTIVE_JOB,
                 "queued_jobs": sum(s.get("status") == "QUEUED" for s in JOBS.values())}
@@ -523,6 +622,11 @@ def health():
 
 @app.get("/jobs/{job_id}")
 def job_status(request: Request, job_id: int):
+    """Return one local job's status and handle the supported job-status interaction.
+
+    Connections: The local worker UI polls this route; job-scoped backend credentials are used for server communication.
+    """
+
     _origin_ok(request)
     state = _load_state(job_id)
     return {k: state.get(k) for k in ("job_id", "status", "message", "page", "total", "updated_at", "error")}
@@ -591,6 +695,11 @@ async def enqueue_job(
 
 @app.post("/jobs/{job_id}/pause")
 def pause_job(request: Request, job_id: int):
+    """Request a safe pause for one local extraction job.
+
+    Connections: The worker writes a job control marker that the extraction loop checks at its next supported checkpoint.
+    """
+
     _origin_ok(request)
     state = _load_state(job_id)
     if state.get("status") not in {"QUEUED", "EXTRACTING"}:
@@ -604,6 +713,11 @@ def pause_job(request: Request, job_id: int):
 
 @app.post("/jobs/{job_id}/resume")
 def resume_job(request: Request, job_id: int):
+    """Remove the pause marker and allow an eligible local job to continue.
+
+    Connections: The local worker UI calls this after an administrator resumes the job.
+    """
+
     _origin_ok(request)
     state = _load_state(job_id)
     if state.get("status") != "PAUSED":
@@ -618,6 +732,11 @@ def resume_job(request: Request, job_id: int):
 
 @app.post("/jobs/{job_id}/retry")
 def retry_job(request: Request, job_id: int):
+    """Reset an eligible failed/cancelled local job for another extraction attempt.
+
+    Connections: The route reuses the saved source and backend job identity instead of creating a second production import.
+    """
+
     _origin_ok(request)
     state = _load_state(job_id)
     if state.get("status") not in {"FAILED", "CANCELLED", "DONE"}:
@@ -668,6 +787,11 @@ def retry_job(request: Request, job_id: int):
 
 @app.delete("/jobs/{job_id}")
 def delete_local_job(request: Request, job_id: int):
+    """Delete one local worker job and its private local files when its state permits removal.
+
+    Connections: The local worker UI calls this; the backend is notified so the corresponding import state can remain consistent.
+    """
+
     _origin_ok(request)
     state = _load_state(job_id)
     if state.get("status") not in TERMINAL:
@@ -680,6 +804,11 @@ def delete_local_job(request: Request, job_id: int):
 
 @app.post("/jobs/{job_id}/cancel")
 def cancel_job(request: Request, job_id: int):
+    """Request cancellation of one local extraction job and notify the backend.
+
+    Connections: The route writes a control marker for the worker loop and sends the matching job-scoped cancel request to CAPFind.
+    """
+
     _origin_ok(request)
     state = _load_state(job_id)
     if state.get("status") in TERMINAL:
