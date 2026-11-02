@@ -1,7 +1,14 @@
+"""Import job states and the permitted transitions between them.
+
+backend.main and backend.admin.processing use this state model to keep the
+durable PostgreSQL import workflow from jumping between invalid stages.
+"""
+
 from enum import Enum
 
 
 class JobStatus(str, Enum):
+    """Named states used by import_jobs and the admin progress interface."""
     RECEIVED = "RECEIVED"
     SECURITY_CHECK = "SECURITY_CHECK"
     IDENTIFIED = "IDENTIFIED"
@@ -54,5 +61,9 @@ TERMINAL_STATUSES = {
 
 
 def can_transition(current, target):
+    """Check whether a job may move from its current state to the target state.
+
+    Connections: Processing and API handlers use this rule before persisting an import status change.
+    """
     current_value = getattr(current, "value", current)
     return target in _ALLOWED.get(current_value, set())
