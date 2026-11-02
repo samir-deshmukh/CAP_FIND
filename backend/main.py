@@ -1,3 +1,9 @@
+"""FastAPI entry point for CETFind's public and administrative services.
+
+Connects browser requests to the public API, admin workflows, PostgreSQL and
+background workers that process CAP imports outside the HTTP request path.
+"""
+
 import os,uuid,json,time,re,secrets,logging,sys,subprocess,threading,hashlib,csv
 from pathlib import Path
 from fastapi import FastAPI,Request,UploadFile,File,HTTPException,Form,BackgroundTasks
@@ -23,6 +29,9 @@ BASE = Path(__file__).resolve().parent.parent
 SITE = BASE / 'site'
 IMPORTS = BASE / 'data' / 'imports'
 IMPORTS.mkdir(parents=True, exist_ok=True)
+# ----------------------------------------------------------------------
+# Application lifecycle and durable import queue
+# ----------------------------------------------------------------------
 def _recover_interrupted_imports():
     """Requeue jobs whose database lease expired; never steal a live worker's job."""
     with connect() as connection:
@@ -174,11 +183,19 @@ def _import_queue_loop():
 
 @asynccontextmanager
 async def lifespan(_app):
+    """Manage the FastAPI application's startup and shutdown.
+
+    Connections: Starts database maintenance and the durable import worker alongside the web application.
+    """
     # Do database migrations/recovery in the background. During a rolling
     # deploy an older instance can still hold a transaction, and PostgreSQL
     # DDL can otherwise block Uvicorn startup long enough for Render's port
     # scanner to declare the new instance unhealthy.
     def _startup_database_maintenance():
+        """Run schema setup and startup recovery outside the ASGI startup path.
+
+        Connections: Prepares PostgreSQL tables and indexes used by public APIs, admin workflows and background jobs.
+        """
         _cleanup_abandoned_upload_temps()
         try:
             init_admin_schema()
@@ -258,6 +275,9 @@ async def lifespan(_app):
 app=FastAPI(title='CET CAP Admin API', lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 
+# ----------------------------------------------------------------------
+# HTTP security, public pages and candidate-facing endpoints
+# ----------------------------------------------------------------------
 @app.get('/healthz', include_in_schema=False)
 def healthz():
     """Cheap liveness endpoint for the hosting platform."""
@@ -314,6 +334,13 @@ _RATE_WINDOW = 60.0      # seconds
 _RATE_LIMIT   = 120       # max requests per IP per window
 
 def _rate_ok(ip: str) -> bool:
+
+    """Check whether a client is within the configured request window.
+
+
+    Connections: Used by protected endpoints to reject excessive requests before they reach the database or business logic.
+
+    """
     now = time.monotonic()
     hits = _rate_store.get(ip, [])
     hits = [t for t in hits if now - t < _RATE_WINDOW]
@@ -346,6 +373,13 @@ _LOGIN_WINDOW = 60.0
 _LOGIN_MAX_KEYS = 5000
 
 def _login_ok(ip: str) -> bool:
+
+    """Track repeated login attempts and enforce the configured cooldown.
+
+
+    Connections: The login route calls this before verifying credentials to slow repeated password guesses.
+
+    """
     now = time.monotonic()
     # Expire old keys as well as old hits so spoofed/rotating source addresses
     # cannot grow this process-local limiter without bound.
@@ -370,15 +404,36 @@ def _login_ok(ip: str) -> bool:
     return True
 
 def _csrf_value(request: Request) -> str:
+
+    """Read or create the CSRF token used by the admin sign-in flow.
+
+
+    Connections: The token is placed in a browser cookie and later echoed by the admin form or API requests.
+
+    """
     token=request.cookies.get(_CSRF_COOKIE)
     if token and re.fullmatch(r'[A-Za-z0-9_-]{32,128}',token): return token
     return secrets.token_urlsafe(32)
 
 def _set_csrf(response, token: str):
+
+    """Attach the CSRF token to a response cookie.
+
+
+    Connections: The browser reads this cookie and sends the matching token with state-changing admin requests.
+
+    """
     response.set_cookie(_CSRF_COOKIE, token, httponly=False, secure=_COOKIE_SECURE,
                         samesite='strict', path='/admin', max_age=28800)
 
 def _check_csrf(request: Request, supplied: str|None=None) -> None:
+
+    """Validate that the submitted CSRF token matches the browser cookie.
+
+
+    Connections: Protected admin routes call this before accepting a state-changing request.
+
+    """
     cookie=request.cookies.get(_CSRF_COOKIE)
     header=request.headers.get('x-csrf-token')
     candidate=header or supplied
@@ -386,6 +441,13 @@ def _check_csrf(request: Request, supplied: str|None=None) -> None:
         raise HTTPException(403,'CSRF validation failed')
 
 def hmac_compare(a: str,b: str) -> bool:
+
+    """Compare security tokens without revealing how many characters match.
+
+
+    Connections: Used by CSRF and authentication checks where ordinary string comparison is not appropriate.
+
+    """
     import hmac
     return hmac.compare_digest(a,b)
 
@@ -393,6 +455,10 @@ def hmac_compare(a: str,b: str) -> bool:
 
 @app.middleware('http')
 async def security_headers(request: Request, call_next):
+    """Add the application's browser security headers to each HTTP response.
+
+    Connections: Runs as FastAPI middleware around public and admin routes.
+    """
     response=await call_next(request)
     response.headers['X-Content-Type-Options']='nosniff'
     response.headers['X-Frame-Options']='DENY'
@@ -405,6 +471,10 @@ async def security_headers(request: Request, call_next):
     return response
 @app.exception_handler(404)
 async def not_found(request: Request, exc: HTTPException):
+    """Return the correct not-found response for the requested route.
+
+    Connections: API and admin callers receive JSON; candidate-facing browser routes use the site's 404 page.
+    """
     # Keep API/admin 404s machine-readable; render the candidate-facing 404 page for browser routes.
     if request.url.path.startswith('/api/') or request.url.path.startswith('/admin/'):
         return JSONResponse(status_code=404, content={'detail': 'Not Found'})
@@ -413,16 +483,28 @@ async def not_found(request: Request, exc: HTTPException):
 # ── Public candidate site ──
 @app.get('/', include_in_schema=False)
 def public_home():
+    """Redirect the backend root URL to the separately hosted candidate website.
+
+    Connections: Keeps the static frontend on its own service while this FastAPI app serves its API.
+    """
     # The canonical frontend is hosted by the dedicated static-site service.
     # Keep this backend host API/admin-only and prevent a stale duplicate homepage.
     return RedirectResponse('https://cetfind.onrender.com/', status_code=307)
 
 @app.get('/privacy.html', include_in_schema=False)
 def public_privacy():
+    """Redirect the privacy-page request to the canonical static-site page.
+
+    Connections: The content is hosted with the candidate-facing frontend, not generated by this backend.
+    """
     return RedirectResponse('https://cetfind.onrender.com/privacy.html', status_code=307)
 
 @app.get('/knowledge.html', include_in_schema=False)
 def public_knowledge():
+    """Redirect the knowledge-page request to the canonical static-site page.
+
+    Connections: The content is hosted with the candidate-facing frontend, not generated by this backend.
+    """
     return RedirectResponse('https://cetfind.onrender.com/knowledge.html', status_code=307)
 
 # Public feedback uses a separate limiter so normal data browsing is unaffected.
@@ -431,6 +513,13 @@ _FEEDBACK_WINDOW = 600.0
 _FEEDBACK_LIMIT = 3
 
 def _feedback_ok(ip: str) -> bool:
+
+    """Apply a separate per-client limit to public feedback submissions.
+
+
+    Connections: The public feedback endpoint calls this before writing a new message to PostgreSQL.
+
+    """
     now = time.monotonic()
     hits = [t for t in _FEEDBACK_RATE.get(ip, []) if now - t < _FEEDBACK_WINDOW]
     if len(hits) >= _FEEDBACK_LIMIT:
@@ -446,6 +535,10 @@ def _feedback_ok(ip: str) -> bool:
 
 @app.post('/api/feedback')
 async def public_feedback(request: Request):
+    """Validate a candidate feedback submission and store it in PostgreSQL.
+
+    Connections: The public website sends the request; the protected admin feedback page later reads and updates it.
+    """
     ip=client_ip(request)
     if not _feedback_ok(ip):
         raise HTTPException(429, 'Please wait before sending more feedback.')
@@ -496,6 +589,10 @@ async def analytics_event(request: Request):
 
 @app.get('/admin/api/analytics/summary')
 def analytics_summary(request: Request, days: int = 30):
+    """Return aggregate anonymous website-usage counts for the requested period.
+
+    Connections: The admin dashboard calls this endpoint to display totals; it does not return individual visitor identities.
+    """
     require(request)
     days = max(1, min(int(days or 30), 90))
     with connect() as c:
@@ -512,6 +609,13 @@ def analytics_summary(request: Request, days: int = 30):
 # Public data files are intentionally NOT mounted. Master datasets remain server-side.
 
 def user(request):
+
+    """Resolve the admin session cookie to an active database user.
+
+
+    Connections: The require() authorization helper uses this result before allowing access to protected admin routes.
+
+    """
     session = request.cookies.get(_SESSION_COOKIE)
     if not session:
         return None
@@ -550,12 +654,29 @@ _ADMIN_LOCK_TTL_SECONDS = 45
 _ADMIN_TAB_HEADER = 'x-admin-client-id'
 
 
+# ----------------------------------------------------------------------
+# Admin authentication, authorization and single-tab session lock
+# ----------------------------------------------------------------------
 def _admin_tab_id(request: Request) -> str | None:
+    """Read and validate the browser tab identifier sent with an admin request.
+
+    Connections: The identifier connects browser requests to the single-active-tab lock stored in PostgreSQL.
+    """
     value = (request.headers.get(_ADMIN_TAB_HEADER) or '').strip()
     return value if re.fullmatch(r'[A-Za-z0-9_-]{20,128}', value) else None
 
 
 def _acquire_admin_lock(connection, user_id: int, client_id: str):
+
+
+    """Create or renew the active browser-tab lock for one admin user.
+
+
+
+    Connections: The lock endpoints and require() use this database record to enforce the one-tab rule.
+
+
+    """
     return connection.execute(
         """INSERT INTO admin_active_lock(user_id,client_id,updated_at)
            VALUES (?,?,CURRENT_TIMESTAMP)
@@ -569,6 +690,16 @@ def _acquire_admin_lock(connection, user_id: int, client_id: str):
 
 
 def require(request, roles=None, csrf=False, csrf_value=None, check_tab=True):
+
+
+    """Enforce admin login, role, CSRF and active-tab requirements.
+
+
+
+    Connections: Admin page and API handlers call this before reading or changing protected project data.
+
+
+    """
     current_user = user(request)
     if not current_user:
         # Browser-facing admin pages should go back to the login screen instead
@@ -597,6 +728,10 @@ def require(request, roles=None, csrf=False, csrf_value=None, check_tab=True):
 
 @app.get('/admin/login', response_class=HTMLResponse)
 def login(request: Request):
+    """Render the admin sign-in page and provide its CSRF token.
+
+    Connections: The browser submits credentials to login_post() and uses the returned session cookie for later admin requests.
+    """
     token = _csrf_value(request)
     error = ('<p style="color:#b42333;font-weight:600">Invalid username or password.</p>' if request.query_params.get('error') == '1' else
              '<p style="color:#b42333;font-weight:600">Admin panel is already active in another tab. Close it or wait for its lock to expire.</p>' if request.query_params.get('locked') == '1' else
@@ -638,6 +773,10 @@ def login_post(
     password: str = Form(...),
     csrf_token: str = Form(...),
 ):
+    """Verify submitted admin credentials and create an authenticated session.
+
+    Connections: Uses the login limiter and security helpers, then sets the session and CSRF cookies for the browser.
+    """
     ip = client_ip(request)
     if not _login_ok(ip):
         raise HTTPException(429, 'Too many login attempts. Please wait before trying again.')
@@ -691,6 +830,10 @@ def login_post(
 
 @app.post('/admin/api/admin-lock/acquire')
 def admin_lock_acquire(request: Request):
+    """Acquire the server-side single-tab lock for the authenticated browser tab.
+
+    Connections: Shared admin JavaScript calls this when an admin page opens or needs to retry its lock.
+    """
     current = require(request, csrf=True, check_tab=False)
     client_id = _admin_tab_id(request)
     if not client_id:
@@ -705,6 +848,10 @@ def admin_lock_acquire(request: Request):
 
 @app.post('/admin/api/admin-lock/release')
 def admin_lock_release(request: Request):
+    """Release the active-tab lock belonging to the authenticated browser tab.
+
+    Connections: This endpoint is used by explicit admin lock-release requests; the database remains the source of lock ownership.
+    """
     current = require(request, csrf=True, check_tab=False)
     client_id = _admin_tab_id(request)
     if not client_id:
@@ -720,6 +867,10 @@ def admin_lock_release(request: Request):
 
 @app.post('/admin/api/admin-lock/heartbeat')
 def admin_lock_heartbeat(request: Request):
+    """Renew the active-tab lock while the admin page remains open.
+
+    Connections: The shared admin JavaScript sends periodic heartbeats so another tab cannot take over a live session.
+    """
     current = require(request, csrf=True, check_tab=False)
     client_id = _admin_tab_id(request)
     if not client_id:
@@ -737,6 +888,10 @@ def admin_lock_heartbeat(request: Request):
 
 @app.post('/admin/logout')
 def logout(request: Request):
+    """End the current admin session and clear its browser authentication state.
+
+    Connections: The route checks the request, releases its tab ownership and removes the session cookies.
+    """
     current = require(request, csrf=True)
     client_id = _admin_tab_id(request)
     if not client_id:
@@ -752,11 +907,22 @@ def logout(request: Request):
 
 @app.get('/admin', response_class=HTMLResponse)
 def admin(request: Request):
+    """Serve the admin dashboard after checking the user's admin session and role.
+
+    Connections: Returns the dashboard HTML built by backend.admin_ui.dashboard().
+    """
     require(request)
     return dashboard()
 
 
+# ----------------------------------------------------------------------
+# Derived-data calculation and maintenance endpoints
+# ----------------------------------------------------------------------
 def _run_derived_data_build(job_id: int, course_family: str | None):
+    """Run one queued derived-data refresh and record its final status.
+
+    Connections: Uses the refresh script and PostgreSQL job records; the CET Data Calculator UI observes the result through status APIs.
+    """
     try:
         with connect() as connection:
             connection.execute(
@@ -825,12 +991,20 @@ def _run_derived_data_build(job_id: int, course_family: str | None):
 
 @app.get('/admin/derived-data', response_class=HTMLResponse)
 def derived_data_page(request: Request):
+    """Serve the CET Data Calculator page to authorized data administrators.
+
+    Connections: Returns the page builder from backend.admin_ui and handles the page's form submission.
+    """
     require(request, {'SUPER_ADMIN', 'DATA_ADMIN'})
     return derived_data()
 
 
 @app.post('/admin/api/derived-data/build')
 def start_derived_data_build(request: Request, background_tasks: BackgroundTasks, course: str | None = Form(None)):
+    """Validate the requested course scope and create a derived-data build job.
+
+    Connections: The admin UI submits this endpoint; the background runner performs the actual refresh.
+    """
     current_user = require(request, {'SUPER_ADMIN', 'DATA_ADMIN'}, csrf=True)
     course = (course or '').strip() or None
     with connect() as connection:
@@ -857,6 +1031,10 @@ def start_derived_data_build(request: Request, background_tasks: BackgroundTasks
 
 @app.post('/admin/api/derived-data/retry/{job_id}')
 def retry_derived_data_build(job_id: int, request: Request, background_tasks: BackgroundTasks):
+    """Retry an eligible failed derived-data build.
+
+    Connections: Checks the stored build state before scheduling the same background processing path again.
+    """
     current_user = require(request, {'SUPER_ADMIN', 'DATA_ADMIN'}, csrf=True)
     with connect() as connection:
         job = connection.execute(
@@ -883,6 +1061,16 @@ def retry_derived_data_build(job_id: int, request: Request, background_tasks: Ba
 
 
 def _clear_derived_data_scope(connection, course: str | None) -> None:
+
+
+    """Delete calculated summary data for the selected course scope.
+
+
+
+    Connections: Called by the derived-data clear and build-history cleanup paths; source cutoff and seat facts are retained.
+
+
+    """
     tables = (
         'cutoff_trend_points',
         'cutoff_college_year_summary',
@@ -899,6 +1087,10 @@ def _clear_derived_data_scope(connection, course: str | None) -> None:
 
 @app.delete('/admin/api/derived-data/{job_id}')
 def delete_derived_data_build(job_id: int, request: Request):
+    """Delete one build record and its associated calculated data when allowed.
+
+    Connections: The CET Data Calculator calls this endpoint for a selected build-history row.
+    """
     require(request, {'SUPER_ADMIN', 'DATA_ADMIN'}, csrf=True)
     with connect() as connection:
         active = connection.execute(
@@ -923,6 +1115,10 @@ def delete_derived_data_build(job_id: int, request: Request):
 
 @app.post('/admin/api/derived-data/clear')
 def clear_derived_data(request: Request, course: str | None = Form(None)):
+    """Clear calculated data for the requested course scope.
+
+    Connections: The admin UI calls this endpoint; original cutoff and seat records remain the source data.
+    """
     require(request, {'SUPER_ADMIN', 'DATA_ADMIN'}, csrf=True)
     course = (course or '').strip() or None
     with connect() as connection:
@@ -945,6 +1141,10 @@ def clear_derived_data(request: Request, course: str | None = Form(None)):
 
 @app.get('/admin/api/derived-data/status')
 def derived_data_status(request: Request):
+    """Return derived-data build history and current processing status.
+
+    Connections: The CET Data Calculator browser script polls this endpoint to render its job table.
+    """
     require(request, {'SUPER_ADMIN', 'DATA_ADMIN'})
     with connect() as connection:
         rows = connection.execute(
@@ -961,6 +1161,10 @@ def derived_data_status(request: Request):
 
 @app.get('/admin/api/derived-data/source-coverage')
 def derived_data_source_coverage(request: Request):
+    """Return source-data coverage information for the derived-data workflow.
+
+    Connections: The endpoint reports coverage from PostgreSQL for the protected admin interface.
+    """
     require(request, {'SUPER_ADMIN', 'DATA_ADMIN'})
     with connect() as connection:
         source_checks = connection.execute("""
@@ -997,7 +1201,14 @@ LOCAL_WORKER_FAMILIES = SUPPORTED_COURSE_FAMILIES
 LOCAL_WORKER_ROUNDS = {'C1', 'C2', 'C3', 'C4'}
 
 
+# ----------------------------------------------------------------------
+# Local/remote extraction workers and private artifact transfer
+# ----------------------------------------------------------------------
 def _local_import_artifact_path(job_id: int, data_type: str) -> Path:
+    """Locate the extracted CSV artifact belonging to one import job.
+
+    Connections: Uses the numeric job ID and data type under the private import area rather than a user-supplied filename.
+    """
     suffix = '_cutoffs.csv' if str(data_type).upper() == 'CUTOFFS' else '_seats_long.csv'
     artifact_dir = BASE / 'data' / 'local_import_artifacts' / f'job_{int(job_id)}'
     canonical = artifact_dir / f'job_{int(job_id)}{suffix}'
@@ -1048,6 +1259,16 @@ def _local_worker_token(request: Request, job_id: int):
 
 
 def _remote_worker_auth(request: Request):
+
+
+    """Authenticate the remote extraction worker using the configured shared token.
+
+
+
+    Connections: Remote worker claim, heartbeat and source-download routes call this before serving worker operations.
+
+
+    """
     configured = os.getenv('CAPFIND_REMOTE_WORKER_TOKEN', '').strip()
     header = (request.headers.get('authorization') or '').strip()
     scheme, _, token = header.partition(' ')
@@ -1058,6 +1279,16 @@ def _remote_worker_auth(request: Request):
 
 
 def _remote_worker_heartbeat(connection, worker_id: str, active_job_id: int | None = None):
+
+
+    """Store the remote worker's latest heartbeat and active job in PostgreSQL.
+
+
+
+    Connections: The admin worker-status endpoint reads this record to show whether the worker is online.
+
+
+    """
     connection.execute(
         """INSERT INTO remote_worker_heartbeats(worker_id,last_seen,active_job_id)
            VALUES (?,CURRENT_TIMESTAMP,?) ON CONFLICT(worker_id) DO UPDATE
@@ -1069,6 +1300,16 @@ def _remote_worker_heartbeat(connection, worker_id: str, active_job_id: int | No
 
 
 def _is_remote_worker_job(connection, job_id: int) -> bool:
+
+
+    """Check whether an import job is assigned to the remote-worker workflow.
+
+
+
+    Connections: Used by worker and local-import routes to choose the correct processing and authorization path.
+
+
+    """
     return bool(connection.execute(
         "SELECT 1 AS found FROM import_events WHERE job_id=? AND event_type='REMOTE_LOCAL_QUEUED' LIMIT 1",
         (job_id,),
@@ -1142,6 +1383,10 @@ def create_remote_worker_import(request: Request, file: UploadFile = File(...)):
 
 @app.post('/admin/api/remote-worker/claim')
 def claim_remote_worker_import(request: Request, payload: dict | None = None):
+    """Let an authenticated remote worker claim the next eligible queued PDF job.
+
+    Connections: Returns job details and records the worker lease so the server and worker agree on job ownership.
+    """
     _remote_worker_auth(request)
     worker_id = str((payload or {}).get('worker_id') or '').strip()[:100]
     if not re.fullmatch(r'[A-Za-z0-9_.-]{1,100}', worker_id):
@@ -1182,6 +1427,10 @@ def claim_remote_worker_import(request: Request, payload: dict | None = None):
 
 @app.get('/admin/api/remote-worker/status')
 def remote_worker_status(request: Request):
+    """Return remote-worker availability, active-job and storage readiness information.
+
+    Connections: The Import Center calls this endpoint to show whether remote PDF extraction is ready.
+    """
     require(request, {'SUPER_ADMIN', 'DATA_ADMIN', 'REVIEWER', 'READ_ONLY'})
     configured = len(os.getenv('CAPFIND_REMOTE_WORKER_TOKEN', '').strip()) >= 32
     with connect() as connection:
@@ -1199,6 +1448,10 @@ def remote_worker_status(request: Request):
 
 @app.get('/admin/api/remote-worker/jobs/{job_id}/source')
 def download_remote_worker_source(request: Request, job_id: int):
+    """Stream a job's private source PDF to its authorized extraction worker.
+
+    Connections: Checks the job-scoped capability token and storage record before returning the file.
+    """
     _local_worker_token(request, job_id)
     with connect() as connection:
         job = connection.execute('SELECT stored_path,original_filename,size_bytes,status FROM import_jobs WHERE id=?', (job_id,)).fetchone()
@@ -1211,6 +1464,13 @@ def download_remote_worker_source(request: Request, job_id: int):
             raise HTTPException(409, 'Remote worker source is not in durable server storage')
 
     def chunks():
+
+        """Yield a file response in bounded pieces instead of reading the whole file at once.
+
+
+        Connections: Used by the source-download path to keep large PDF transfers from requiring one full in-memory buffer.
+
+        """
         with materialize_source(stored_path) as source_path:
             with Path(source_path).open('rb') as handle:
                 while True:
@@ -1227,6 +1487,16 @@ def download_remote_worker_source(request: Request, job_id: int):
 
 
 def _local_worker_fail(job_id: int, message: str):
+
+
+    """Mark a local extraction job as failed and record the reason.
+
+
+
+    Connections: Called by local-worker failure handling so the Import Center can display the outcome.
+
+
+    """
     message = str(message or 'Local extraction failed')[:4000]
     with connect() as connection:
         job = connection.execute('SELECT status FROM import_jobs WHERE id=?', (job_id,)).fetchone()
@@ -1248,6 +1518,16 @@ def _local_worker_fail(job_id: int, message: str):
 
 
 def _reserve_local_artifact_worker(connection, job_id: int) -> None:
+
+
+    """Reserve the database worker lease before accepting an extracted CSV artifact.
+
+
+
+    Connections: Prevents another worker from claiming the same import while server-side validation and staging begin.
+
+
+    """
     """Make CSV staging visible and protected before returning the upload response."""
     connection.execute(
         "UPDATE import_jobs SET worker_id=?,worker_lease_until=CURRENT_TIMESTAMP + INTERVAL '2 minutes',updated_at=CURRENT_TIMESTAMP WHERE id=?",
@@ -1262,6 +1542,16 @@ def _reserve_local_artifact_worker(connection, job_id: int) -> None:
 def _process_local_import_background(job_id: int, artifact_path: str,
                                      data_type: str, family: str, year: int,
                                      round_name: str | None, summary: dict):
+
+
+    """Validate and stage an artifact returned by the local extraction worker.
+
+
+
+    Connections: Reuses the existing import pipeline and writes job progress/events for the admin interface.
+
+
+    """
     """Validate/stage a locally extracted artifact using the existing pipeline."""
     worker_id = _WORKER_ID
     heartbeat_stop = threading.Event()
@@ -1352,6 +1642,16 @@ def _process_local_import_background(job_id: int, artifact_path: str,
 def _write_local_artifact_progress(job_id: int, processed: int, total: int, *,
                                    status: str = 'RUNNING', stage: str = 'Staging extracted rows',
                                    message: str | None = None) -> None:
+
+
+    """Translate artifact-processing progress into the shared import commit-progress record.
+
+
+
+    Connections: The live processing page reads this record to show progress while server staging runs.
+
+
+    """
     from .admin.processing import _write_commit_progress
     total = max(0, int(total))
     processed = max(0, int(processed))
@@ -1366,6 +1666,10 @@ def _write_local_artifact_progress(job_id: int, processed: int, total: int, *,
 
 @app.post('/admin/api/local-imports')
 def create_local_import(request: Request, payload: dict):
+    """Create an import job for PDF extraction on the administrator's own computer.
+
+    Connections: Returns a job-scoped upload token that the local worker uses for later progress and artifact requests.
+    """
     current_user = require(request, {'SUPER_ADMIN', 'DATA_ADMIN'}, csrf=True)
     filename = Path(str(payload.get('filename') or '')).name
     size_bytes = payload.get('size_bytes')
@@ -1404,6 +1708,10 @@ def create_local_import(request: Request, payload: dict):
 
 @app.post('/admin/api/local-imports/{job_id}/progress')
 def local_import_progress(request: Request, job_id: int, payload: dict):
+    """Accept an authenticated progress update from the local worker.
+
+    Connections: Updates the job's status and event history shown in the Import Center.
+    """
     _local_worker_token(request, job_id)
     page = max(0, min(100000, int(payload.get('page') or 0)))
     total = max(0, min(100000, int(payload.get('total') or 0)))
@@ -1455,6 +1763,10 @@ def local_import_progress(request: Request, job_id: int, payload: dict):
 
 @app.post('/admin/api/local-imports/{job_id}/fail')
 def local_import_fail(request: Request, job_id: int, payload: dict):
+    """Accept a local worker failure report for one import job.
+
+    Connections: Validates the job token and delegates the state update to _local_worker_fail().
+    """
     _local_worker_token(request, job_id)
     message = str(payload.get('error') or 'Local extraction failed')[:4000]
     _local_worker_fail(job_id, message)
@@ -1463,6 +1775,10 @@ def local_import_fail(request: Request, job_id: int, payload: dict):
 
 @app.post('/admin/api/local-imports/{job_id}/cancel')
 def local_import_cancel(request: Request, job_id: int):
+    """Request cancellation of a local extraction job.
+
+    Connections: Writes the job control marker and updates durable state for the local worker to observe.
+    """
     _local_worker_token(request, job_id)
     marker = BASE / 'data' / 'import_staging' / f'job_{job_id}' / 'CANCEL'
     marker.parent.mkdir(parents=True, exist_ok=True)
@@ -1486,6 +1802,10 @@ def local_import_cancel(request: Request, job_id: int):
 
 @app.post('/admin/api/local-imports/{job_id}/restart')
 def local_import_restart(request: Request, job_id: int):
+    """Clear the job's pause/cancel markers so local extraction can be retried.
+
+    Connections: The Import Center uses this endpoint when an administrator restarts a stopped local job.
+    """
     _local_worker_token(request, job_id)
     marker = BASE / 'data' / 'import_staging' / f'job_{job_id}' / 'CANCEL'
     if marker.exists():
@@ -1512,6 +1832,10 @@ def local_import_restart(request: Request, job_id: int):
 
 @app.get('/admin/api/local-imports/{job_id}/status')
 def local_import_status(request: Request, job_id: int):
+    """Return the status of one local-worker import job.
+
+    Connections: The local worker and admin interface use this endpoint to check the job's durable state.
+    """
     _local_worker_token(request, job_id)
     with connect() as connection:
         job = connection.execute('SELECT id,status,error_message,updated_at,worker_id FROM import_jobs WHERE id=?', (job_id,)).fetchone()
@@ -1535,6 +1859,10 @@ def local_import_status(request: Request, job_id: int):
 
 @app.post('/admin/api/local-imports/{job_id}/revalidate')
 def revalidate_local_import(request: Request, job_id: int, background_tasks: BackgroundTasks):
+    """Re-run server-side validation for an already received local extraction artifact.
+
+    Connections: Uses the stored artifact and existing validation pipeline rather than extracting the original PDF again.
+    """
     _local_worker_token(request, job_id)
     with connect() as connection:
         job = connection.execute('SELECT * FROM import_jobs WHERE id=?', (job_id,)).fetchone()
@@ -1579,6 +1907,10 @@ def receive_local_artifact(
     round_name: str = Form(''), source_sha256: str = Form(...),
     summary_json: str = Form('{}'),
 ):
+    """Receive the CSV produced by the local extraction worker and begin server-side processing.
+
+    Connections: Checks the job capability and artifact details, then hands the file to the validation/staging worker.
+    """
     _local_worker_token(request, job_id)
     data_type = str(data_type).upper().strip()
     family = str(family).upper().strip()
@@ -1677,6 +2009,10 @@ def receive_local_artifact(
 
 @app.post('/admin/api/imports')
 def upload(request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    """Accept a CAP source PDF and create a durable import job.
+
+    Connections: Runs preflight checks, stores the private source file and queues extraction; upload alone never publishes records.
+    """
     current_user = require(request, {'SUPER_ADMIN', 'DATA_ADMIN'}, csrf=True)
     name = Path(file.filename or '').name
     if not name.lower().endswith('.pdf'):
@@ -1776,12 +2112,26 @@ MAX_CSV_BYTES = 100 * 1024 * 1024
 CSV_CUTOFF_REQUIRED = {'source_pdf','page','institution_code','institution_name','program_code','program_name','status','home_university','section','stage','category','rank','rank_number','rank_suffix','percentage','percentage_raw','raw_value','source','merged_from'}
 CSV_SEAT_REQUIRED = {'source_pdf','page','institution_code','choice_code','allocation_type','category','gender','seats'}
 
+# ----------------------------------------------------------------------
+# Import intake, queue processing and worker controls
+# ----------------------------------------------------------------------
 def _csv_header(path: Path):
+    """Read and normalize the header row from a canonical CSV file.
+
+    Connections: Used by CSV import validation to check the supplied columns before staging records.
+    """
     with path.open('r', encoding='utf-8-sig', newline='') as handle:
         try: return {str(value).strip() for value in next(csv.reader(handle))}
         except StopIteration: return set()
 
 def _process_csv_import_background(job_id: int):
+
+    """Validate and stage a canonical CSV through the same durable import workflow.
+
+
+    Connections: The queue worker calls this for CSV jobs so they do not enter the PDF parser.
+
+    """
     """Stage a locally pre-extracted canonical CSV through existing validation."""
     with _IMPORT_PROCESS_LOCK:
         with connect() as connection:
@@ -1810,6 +2160,10 @@ def _process_csv_import_background(job_id: int):
                                            f"CSV received ({total_bytes:,} bytes); starting validation")
                     csv_progress_state = {'processed': 0, 'total': 0}
                     def report_csv_progress(processed, total):
+                        """Record row-level progress while a canonical CSV is being processed.
+
+                        Connections: The Import Center reads the resulting job events and status to display progress.
+                        """
                         csv_progress_state.update(processed=processed, total=total)
                         _write_commit_progress(
                             job_id, 'RUNNING', 'Staging CSV rows', processed, total,
@@ -1844,6 +2198,10 @@ def _process_csv_import_background(job_id: int):
 def upload_csv(request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...),
                data_type: str = Form(...), course_family: str = Form(...), year: int = Form(...),
                round_name: str = Form('')):
+    """Accept a canonical CSV and create a queued import job for validation and staging.
+
+    Connections: The Import Center sends CSV files here; the route does not write directly to production fact tables.
+    """
     current_user = require(request, {'SUPER_ADMIN','DATA_ADMIN'}, csrf=True)
     name = Path(file.filename or '').name
     if not name.lower().endswith('.csv'): raise HTTPException(400,'Only .csv files are accepted in CSV Import')
@@ -1911,6 +2269,13 @@ def upload_csv(request: Request, background_tasks: BackgroundTasks, file: Upload
         raise
 
 def _resolver_server_busy():
+
+    """Check whether the server is already occupied by memory-heavy import processing.
+
+
+    Connections: The resolver uses this guard to avoid competing with the serialized import worker on the small web instance.
+
+    """
     """Keep AI resolver work out of the critical path on the small web instance."""
     with connect() as c:
         active = c.execute(
@@ -1933,6 +2298,16 @@ def _resolver_server_busy():
 
 
 def _resolve_one_import_background(job_id: int):
+
+
+    """Run one automatic college-website lookup in a short-lived child process.
+
+
+
+    Connections: Keeps resolver memory use separate from the FastAPI web process and returns the result to the resolver workflow.
+
+
+    """
     """Run exactly one resolver step in a short-lived child process.
 
     The web service is intentionally small (512 MB on the current Render
@@ -1986,6 +2361,16 @@ def _resolve_one_import_background(job_id: int):
 
 
 def _resolve_one_manual_resolver_step(status_filter, exclude_codes, institution_code):
+
+
+    """Run one manually requested website lookup in a short-lived child process.
+
+
+
+    Connections: The resolver UI uses this bounded step for an individual college rather than loading the full resolver workload into the web process.
+
+
+    """
     """Run one admin resolver step in a short-lived process to bound web RAM."""
     env = os.environ.copy()
     env.setdefault('PYTHONIOENCODING', 'utf-8')
@@ -2017,12 +2402,32 @@ def _resolve_one_manual_resolver_step(status_filter, exclude_codes, institution_
 
 
 def _process_import_background(job_id: int):
+
+
+    """Start one import in the background while respecting the global processing lock.
+
+
+
+    Connections: Called by queue/retry paths so memory-heavy PDF processing does not overlap.
+
+
+    """
     """Run one memory-heavy import at a time on the web instance."""
     with _IMPORT_PROCESS_LOCK:
         _process_import_background_locked(job_id)
 
 
 def _process_import_background_locked(job_id: int):
+
+
+    """Run extraction, normalization, validation and staging while the import lock is held.
+
+
+
+    Connections: Uses the admin processing pipeline and updates PostgreSQL job state/events; production publishing remains a separate approval step.
+
+
+    """
     """Process an import while the global PDF-processing lock is held."""
     with connect() as connection:
         job = connection.execute('SELECT * FROM import_jobs WHERE id=?', (job_id,)).fetchone()
@@ -2065,6 +2470,10 @@ def _process_import_background_locked(job_id: int):
 
 @app.post('/admin/api/imports/{job_id}/process')
 def process_job(request: Request, job_id: int, background_tasks: BackgroundTasks):
+    """Authorize and schedule processing or retry for an existing import job.
+
+    Connections: The Import Center calls this endpoint; the background worker performs the actual extraction and staging.
+    """
     require(request, {'SUPER_ADMIN', 'DATA_ADMIN'}, csrf=True)
     with connect() as connection:
         job = connection.execute(
@@ -2189,6 +2598,10 @@ def process_job(request: Request, job_id: int, background_tasks: BackgroundTasks
 
 @app.post('/admin/api/imports/{job_id}/pause')
 def pause_import(request: Request, job_id: int):
+    """Request a safe pause for an active import at a supported checkpoint.
+
+    Connections: The route records the pause request for the worker; it does not interrupt a page/chunk in the middle of processing.
+    """
     require(request, {'SUPER_ADMIN', 'DATA_ADMIN'}, csrf=True)
     with connect() as connection:
         job = connection.execute('SELECT status,stored_path,EXISTS(SELECT 1 FROM local_worker_receipts r WHERE r.job_id=import_jobs.id) AS local_artifact_received FROM import_jobs WHERE id=?', (job_id,)).fetchone()
@@ -2209,6 +2622,10 @@ def pause_import(request: Request, job_id: int):
 
 @app.post('/admin/api/imports/{job_id}/resume')
 def resume_import(request: Request, job_id: int):
+    """Resume an import that is eligible to continue after a pause.
+
+    Connections: Clears the pause state and returns the job to the appropriate worker queue.
+    """
     require(request, {'SUPER_ADMIN', 'DATA_ADMIN'}, csrf=True)
     with connect() as connection:
         job = connection.execute('SELECT status,stored_path,original_filename,worker_id,COALESCE((SELECT l.lease_until > CURRENT_TIMESTAMP FROM import_worker_leases l WHERE l.job_id=import_jobs.id),(worker_lease_until > CURRENT_TIMESTAMP)) AS worker_alive,EXISTS(SELECT 1 FROM local_worker_receipts r WHERE r.job_id=import_jobs.id) AS local_artifact_received FROM import_jobs WHERE id=?', (job_id,)).fetchone()
@@ -2232,9 +2649,17 @@ def resume_import(request: Request, job_id: int):
 
 @app.get('/admin/api/runtime')
 def runtime_metrics(request: Request):
+    """Collect bounded process/container CPU and memory information for the admin UI.
+
+    Connections: The Import Center reads this endpoint to monitor resource use during extraction.
+    """
     require(request, {'SUPER_ADMIN', 'DATA_ADMIN', 'REVIEWER', 'READ_ONLY'})
     import shutil
     def read_int(path):
+        """Read an integer value from a system or container metrics file with a safe fallback.
+
+        Connections: Used by runtime_metrics() when the host exposes numeric cgroup or proc values.
+        """
         try:
             raw = Path(path).read_text(encoding='utf-8').strip()
             return None if raw in {'max', ''} else int(raw)
@@ -2280,6 +2705,13 @@ def runtime_metrics(request: Request):
         pass
 
     def tree_bytes(path):
+
+        """Calculate the total size of files beneath a directory.
+
+
+        Connections: Used by the database/storage diagnostics to report disk usage without loading file contents.
+
+        """
         total = 0
         try:
             for item in Path(path).rglob('*'):
@@ -2388,6 +2820,10 @@ def database_storage(request: Request):
 
 @app.post('/admin/api/imports/{job_id}/cancel')
 def cancel_import(request: Request, job_id: int):
+    """Request cancellation of a running or queued import job.
+
+    Connections: Persists the cancellation state/control marker for the worker and returns the updated job state.
+    """
     require(request, {'SUPER_ADMIN', 'DATA_ADMIN'}, csrf=True)
     with connect() as connection:
         job = connection.execute('SELECT *,EXISTS(SELECT 1 FROM local_worker_receipts r WHERE r.job_id=import_jobs.id) AS local_artifact_received FROM import_jobs WHERE id=?', (job_id,)).fetchone()
@@ -2417,6 +2853,10 @@ def cancel_import(request: Request, job_id: int):
 
 @app.delete('/admin/api/imports/{job_id}/source')
 def delete_import_source(request: Request, job_id: int):
+    """Delete the private source file for an import without treating it as a release rollback.
+
+    Connections: The admin UI calls this when an administrator removes only the retained source artifact.
+    """
     user = require(request, {'SUPER_ADMIN', 'DATA_ADMIN'}, csrf=True)
     with connect() as connection:
         job = connection.execute(
@@ -2455,6 +2895,10 @@ def delete_import_source(request: Request, job_id: int):
 
 @app.delete('/admin/api/imports/{job_id}')
 def delete_import(request: Request, job_id: int):
+    """Delete an import and its uncommitted artifacts when its state permits deletion.
+
+    Connections: The route checks the job and related records before removing source/staging data; published release data uses the separate rollback flow.
+    """
     u = require(request, {'SUPER_ADMIN', 'DATA_ADMIN'}, csrf=True)
     with connect() as c:
         job = c.execute('SELECT *, COALESCE((SELECT l.lease_until > CURRENT_TIMESTAMP FROM import_worker_leases l WHERE l.job_id=import_jobs.id),(worker_lease_until > CURRENT_TIMESTAMP)) AS worker_alive FROM import_jobs WHERE id=?', (job_id,)).fetchone()
@@ -2527,6 +2971,10 @@ def delete_import(request: Request, job_id: int):
 
 @app.get('/admin/api/imports')
 def imports(request: Request):
+    """List import jobs and their worker/progress metadata for the admin interface.
+
+    Connections: The dashboard, Import Center and review pages use this response to display queue state.
+    """
     require(request)
     with connect() as connection:
         return [
@@ -2543,6 +2991,10 @@ def imports(request: Request):
 
 @app.get('/admin/api/imports/{job_id}')
 def detail(request: Request, job_id: int):
+    """Return one import job and its event history.
+
+    Connections: The Live Processing page polls this endpoint to display status, progress and available actions.
+    """
     require(request)
     with connect() as connection:
         job = connection.execute(
@@ -2559,18 +3011,33 @@ def detail(request: Request, job_id: int):
 
 
 @app.get('/admin/imports', response_class=HTMLResponse)
+# ----------------------------------------------------------------------
+# Review, approval, release publishing and rollback
+# ----------------------------------------------------------------------
 def import_center_page(request: Request):
+    """Serve the Import Center HTML after checking the admin session.
+
+    Connections: The page content comes from backend.admin_ui.import_center().
+    """
     require(request)
     return import_center()
 
 
 @app.get('/admin/review', response_class=HTMLResponse)
 def review_center_page(request: Request):
+    """Serve the staged-import Review Center to users with review access.
+
+    Connections: The page content comes from backend.admin_ui.review_center().
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER','READ_ONLY'})
     return review_center()
 
 @app.get('/admin/api/review')
 def review_list(request: Request):
+    """Return import jobs that need review, with summary and validation information.
+
+    Connections: The Review Center browser script calls this endpoint to populate its staged-import list.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER','READ_ONLY'})
     with connect() as c:
         rows=c.execute("""
@@ -2586,6 +3053,10 @@ def review_list(request: Request):
 
 @app.post('/admin/api/imports/{job_id}/revalidate-legacy-mh')
 def revalidate_legacy_mh(request: Request, job_id: int):
+    """Run the narrowly scoped compatibility revalidation for legacy Maharashtra staging rows.
+
+    Connections: The reviewer action delegates to the existing staging revalidation helper and records the result.
+    """
     u = require(request, {'SUPER_ADMIN','DATA_ADMIN'}, csrf=True)
     with connect() as c:
         try:
@@ -2596,6 +3067,10 @@ def revalidate_legacy_mh(request: Request, job_id: int):
 
 @app.get('/admin/api/imports/{job_id}/review')
 def review_detail(request: Request, job_id: int):
+    """Return staged rows, validation findings and comparison details for one import.
+
+    Connections: The Review Center requests this data before an administrator approves or rejects the import.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER','READ_ONLY'})
     with connect() as c:
         job=c.execute("SELECT * FROM import_jobs WHERE id=?",(job_id,)).fetchone()
@@ -2607,6 +3082,10 @@ def review_detail(request: Request, job_id: int):
 
 @app.get('/admin/api/imports/{job_id}/commit-progress')
 def import_commit_progress(request: Request, job_id: int):
+    """Return the saved commit-progress state for one import job.
+
+    Connections: The Live Processing page polls this endpoint while approval is promoting records.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER','READ_ONLY'})
     with connect() as c:
         row = c.execute(
@@ -2629,6 +3108,10 @@ def _approve_import_sync(job_id: int, actor_user_id: int, notes: str):
 
 @app.post('/admin/api/imports/{job_id}/approve')
 async def approve(request: Request, job_id: int):
+    """Record an explicit approval decision and run the production promotion.
+
+    Connections: The route authorizes the reviewer, then calls the synchronous promotion in a worker thread; publishing is still a separate release action.
+    """
     u=require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER'},csrf=True)
     try: body=await request.json()
     except Exception: body={}
@@ -2642,6 +3125,10 @@ async def approve(request: Request, job_id: int):
 
 @app.post('/admin/api/imports/{job_id}/reject')
 async def reject(request: Request, job_id: int):
+    """Record a reviewer's rejection and reason for one staged import.
+
+    Connections: The Review Center submits the decision; the staged import is not promoted into production facts.
+    """
     u=require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER'},csrf=True)
     try: body=await request.json()
     except Exception: body={}
@@ -2663,6 +3150,10 @@ async def reject(request: Request, job_id: int):
 
 @app.post('/admin/api/releases/{release_id}/rollback')
 async def rollback(request: Request, release_id: int):
+    """Roll back one published release using its release-scoped ledger.
+
+    Connections: Only rows attributed to that release are affected; public API caches are invalidated after the database operation.
+    """
     u=require(request, {'SUPER_ADMIN'},csrf=True)
     try: body=await request.json()
     except Exception: body={}
@@ -2679,6 +3170,10 @@ async def rollback(request: Request, release_id: int):
 
 @app.delete('/admin/api/releases/{release_id}')
 def delete_rolled_back_release(request: Request, release_id: int):
+    """Permanently purge a release that has already been rolled back.
+
+    Connections: The route delegates to the release ledger cleanup helper after checking the release state.
+    """
     u=require(request, {'SUPER_ADMIN'}, csrf=True)
     with connect() as c:
         try:
@@ -2691,6 +3186,10 @@ def delete_rolled_back_release(request: Request, release_id: int):
 
 @app.post('/admin/api/releases/{release_id}/publish')
 def publish(request: Request, release_id: int):
+    """Publish an approved release and refresh public API state.
+
+    Connections: The route validates the release, calls the publishing service and invalidates public caches after success.
+    """
     u=require(request, {'SUPER_ADMIN','DATA_ADMIN'},csrf=True)
     # Read authorization metadata in a short transaction; publishing performs
     # filesystem work and must not keep this request's database connection open.
@@ -2709,28 +3208,51 @@ def publish(request: Request, release_id: int):
         raise HTTPException(500,'Release publication failed; check the release timeline or server logs')
 
 @app.get('/admin/releases', response_class=HTMLResponse)
+# ----------------------------------------------------------------------
+# Admin dashboards, health, feedback, resolver and audit endpoints
+# ----------------------------------------------------------------------
 def releases_page_route(request: Request):
+    """Serve the release-management page to authorized admin users.
+
+    Connections: The HTML is built by backend.admin_ui.releases_page().
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER','READ_ONLY'})
     return releases_page()
 
 
 @app.get('/admin/rollback', response_class=HTMLResponse)
 def rollback_page_route(request: Request):
+    """Redirect the older rollback URL to the current release-management page.
+
+    Connections: Keeps existing admin links working while the release UI owns rollback controls.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER','READ_ONLY'})
     return RedirectResponse('/admin/releases', status_code=307)
 
 @app.get('/admin/api/releases')
 def releases_api(request: Request):
+    """Return release history for the admin release-management page.
+
+    Connections: The browser uses this endpoint to display release state and available actions.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER','READ_ONLY'})
     with connect() as c: return [dict(r) for r in c.execute("SELECT * FROM data_releases ORDER BY id DESC LIMIT 100")]
 
 @app.get('/admin/health', response_class=HTMLResponse)
 def health_page_route(request: Request):
+    """Serve the admin data-health page after authorization.
+
+    Connections: The HTML is built by backend.admin_ui.health_page().
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER','READ_ONLY'})
     return health_page()
 
 @app.get('/admin/api/overview')
 def overview_api(request: Request):
+    """Return the aggregate counts and recent activity used by the admin dashboard.
+
+    Connections: The dashboard browser script combines this response with analytics and import-list endpoints.
+    """
     require(request)
     with connect() as c:
         imports_today=c.execute("SELECT COUNT(*) n FROM import_jobs WHERE created_at >= CURRENT_DATE AND created_at < CURRENT_DATE + INTERVAL '1 day'").fetchone()['n']
@@ -2755,6 +3277,10 @@ def overview_api(request: Request):
 
 @app.get('/admin/api/health')
 def health_api(request: Request):
+    """Return database, dataset and runtime health checks for administrators.
+
+    Connections: The Data Health page calls this endpoint to render the overall status and table counts.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER','READ_ONLY'})
     with connect() as c:
         counts={t:c.execute(f'SELECT COUNT(*) n FROM {t}').fetchone()['n'] for t in ['institutes','programs','cutoffs','seats','import_jobs','data_releases','audit_log']}
@@ -2763,6 +3289,10 @@ def health_api(request: Request):
 
 @app.get('/admin/feedback', response_class=HTMLResponse)
 def feedback_page_route(request: Request):
+    """Serve the admin feedback inbox with the latest stored feedback rows.
+
+    Connections: The page is rendered by backend.admin_ui.feedback_page() and refreshes through the feedback API.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER','READ_ONLY'})
     with connect() as c:
         rows=[dict(r) for r in c.execute('SELECT id,rating,message,page,status,created_at FROM public_feedback ORDER BY id DESC LIMIT 500')]
@@ -2770,12 +3300,20 @@ def feedback_page_route(request: Request):
 
 @app.get('/admin/api/feedback')
 def feedback_api(request: Request):
+    """List feedback messages for authorized admin users.
+
+    Connections: The Feedback page calls this endpoint to refresh the inbox and its status totals.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER','READ_ONLY'})
     with connect() as c:
         return [dict(r) for r in c.execute('SELECT id,rating,message,page,status,created_at FROM public_feedback ORDER BY id DESC LIMIT 500')]
 
 @app.post('/admin/api/feedback/{feedback_id}/status')
 async def feedback_status(request: Request, feedback_id: int):
+    """Update the status of one feedback message.
+
+    Connections: The admin inbox submits the change; the route records the new status in PostgreSQL.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER'}, csrf=True)
     try: body=await request.json()
     except Exception: body={}
@@ -2794,6 +3332,10 @@ async def feedback_status(request: Request, feedback_id: int):
 
 @app.get('/admin/resolver', response_class=HTMLResponse)
 def resolver_page_route(request: Request):
+    """Serve the college website resolver to authorized admin users.
+
+    Connections: The HTML is built by backend.admin_ui.resolver_page() using the current resolver rows.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER'})
     # Rows are loaded once by the page's API call. Do not sync or query all
     # colleges while constructing the HTML response.
@@ -2801,6 +3343,10 @@ def resolver_page_route(request: Request):
 
 @app.get('/admin/api/resolver')
 def resolver_api(request: Request):
+    """Return college website-resolution records for the resolver interface.
+
+    Connections: The browser uses this data to filter colleges and show verification status.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER'})
     with connect() as c:
         return [dict(r) for r in c.execute(
@@ -2829,6 +3375,10 @@ def resolver_api(request: Request):
 
 @app.post('/admin/api/resolver/seed')
 def resolver_seed(request: Request):
+    """Seed resolver records from existing institute contact information.
+
+    Connections: Uses the resolver service to synchronize source institution data into the resolver queue.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN'}, csrf=True)
     with connect() as connection:
         count = sync_institutes_to_resolver(connection)
@@ -2837,11 +3387,19 @@ def resolver_seed(request: Request):
 
 @app.post('/admin/api/resolver/github-seed')
 def resolver_github_seed(request: Request):
+    """Synchronize resolver candidates from the configured GitHub India source.
+
+    Connections: Delegates to the resolver integration after checking the caller's admin role and request protection.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN'}, csrf=True)
     raise HTTPException(410, 'GitHub seed is disabled; resolver scope is the CAP institutes table')
 
 @app.post('/admin/api/resolver/next')
 async def resolver_next(request: Request):
+    """Process the next eligible college in the resolver queue.
+
+    Connections: The resolver UI calls this repeatedly; each request performs one bounded step and returns the remaining count.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN'}, csrf=True)
     try:
         body = await request.json()
@@ -2933,6 +3491,10 @@ async def resolver_next(request: Request):
 
 @app.post('/admin/api/resolver/find')
 async def resolver_find(request: Request):
+    """Find or refresh website candidates for the selected colleges.
+
+    Connections: The resolver UI sends selected institution IDs; results return with source and verification status for review.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN'}, csrf=True)
     try: body=await request.json()
     except Exception: body={}
@@ -3091,6 +3653,10 @@ async def resolver_find(request: Request):
 
 @app.post('/admin/api/resolver/edit')
 async def resolver_edit(request: Request):
+    """Save an administrator's manual correction to college resolver metadata.
+
+    Connections: Validates the submitted values and updates the resolver record in PostgreSQL.
+    """
     u = require(request, {'SUPER_ADMIN','DATA_ADMIN'}, csrf=True)
     try:
         body = await request.json()
@@ -3136,6 +3702,10 @@ async def resolver_edit(request: Request):
 
 @app.post('/admin/api/resolver/verify')
 async def resolver_manual_verify(request: Request):
+    """Run the server-side checks for a manually supplied college website and update its verification state.
+
+    Connections: The resolver UI sends the college identity and URL; the resolver service performs the final validation.
+    """
     u=require(request, {'SUPER_ADMIN','DATA_ADMIN'}, csrf=True)
     try:
         body=await request.json()
@@ -3177,6 +3747,10 @@ async def resolver_manual_verify(request: Request):
 
 @app.get('/admin/audit', response_class=HTMLResponse)
 def audit_page_route(request: Request):
+    """Serve the recent administrative audit history to authorized users.
+
+    Connections: The page is rendered by backend.admin_ui.audit_page() using the audit rows read from PostgreSQL.
+    """
     require(request, {'SUPER_ADMIN','DATA_ADMIN','REVIEWER','READ_ONLY'})
     with connect() as c: rows=[dict(r) for r in c.execute('SELECT a.*,u.username FROM audit_log a LEFT JOIN admin_users u ON u.id=a.actor_user_id ORDER BY a.id DESC LIMIT 200')]
     return audit_page(rows)
