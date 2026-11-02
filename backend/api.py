@@ -58,7 +58,6 @@ _PUBLIC_COURSES_TTL = 30.0
 _SEARCH_METADATA_CACHE: dict[str, tuple[float, dict[str, dict], dict[str, dict], set]] = {}
 _SEARCH_METADATA_TTL = 30.0
 
-
 class _TTLCache:
     """Small thread-safe TTL cache with single-flight computation.
 
@@ -70,9 +69,7 @@ class _TTLCache:
     """
 
     def __init__(self, max_items: int = 256):
-
         """Initialize the cache size and locks used to coordinate concurrent requests.
-
 
         Connections: Public endpoint handlers share this cache so repeated queries can reuse recent database results.
 
@@ -84,9 +81,7 @@ class _TTLCache:
         self._guard = threading.Lock()
 
     def get_or_set(self, key, ttl: float, factory):
-
         """Return a cached value or compute and cache it once for the requested key.
-
 
         Connections: Endpoint handlers provide the database-backed builder; the per-key lock prevents concurrent cache misses from stampeding PostgreSQL.
 
@@ -119,9 +114,7 @@ class _TTLCache:
                 self._locks.pop(key, None)
 
     def clear(self):
-
         """Remove all cached public responses.
-
 
         Connections: The cache invalidation helper calls this after data publication or rollback.
 
@@ -139,10 +132,7 @@ def invalidate_public_caches() -> None:
 
     """Clear public response and search-metadata caches after production data changes.
 
-
-
     Connections: The admin publishing/rollback workflow calls this so the next candidate API request reads updated PostgreSQL data.
-
 
     """
 
@@ -161,10 +151,7 @@ def available_public_courses(engine) -> list[str]:
 
     """Return the course families currently present in PostgreSQL, refreshing the short-lived cache when needed.
 
-
-
     Connections: Public search and option builders use this database-backed list instead of maintaining a hard-coded course whitelist.
-
 
     """
 
@@ -183,16 +170,10 @@ def available_public_courses(engine) -> list[str]:
         _PUBLIC_COURSES_AT = now
     return list(PUBLIC_COURSES)
 
-
 def check_rate_limit(request: Request):
-
-
     """Enforce the bounded per-process request limit for the calling client.
 
-
-
     Connections: Every public API route calls this before its database query; client_ip() supplies the normalized client address.
-
 
     """
 
@@ -229,14 +210,9 @@ _engine_cache = None
 
 
 def get_active_engine():
-
-
     """Return the shared SQLAlchemy engine configured for the public API.
 
-
-
     Connections: The engine comes from src/cet_cap/db.py and is reused by query helpers instead of creating a new pool per request.
-
 
     """
 
@@ -251,10 +227,7 @@ def _db_available(engine) -> bool:
 
     """Check whether the configured PostgreSQL engine can execute a lightweight query.
 
-
-
     Connections: Public endpoints use this check before returning database-dependent college data.
-
 
     """
 
@@ -271,10 +244,7 @@ def _require_public_course(course: str, engine=None) -> None:
 
     """Reject a course family that is not present in the current database dataset.
 
-
-
     Connections: Uses available_public_courses() so public API routes validate against imported data rather than a fixed list.
-
 
     """
 
@@ -297,14 +267,9 @@ def public_options(request: Request, response: Response):
 
 
 def _build_public_options():
-
-
     """Build the public search-form options from current PostgreSQL records.
 
-
-
     Connections: Called through the options cache; uses the shared engine and the database-driven course-family list.
-
 
     """
 
@@ -333,7 +298,6 @@ def _build_public_options():
     except Exception:
         raise HTTPException(status_code=503, detail="Public PostgreSQL data service is unavailable.")
 
-
 @router.get("/stats")
 def public_stats(request: Request, response: Response):
     """Return aggregate dataset totals for the candidate website.
@@ -347,14 +311,9 @@ def public_stats(request: Request, response: Response):
 
 
 def _build_public_stats():
-
-
     """Calculate the public dataset totals from PostgreSQL.
 
-
-
     Connections: Called by the stats cache and returns the counts used by the candidate-facing summary UI.
-
 
     """
 
@@ -381,7 +340,6 @@ def _build_public_stats():
     except Exception:
         raise HTTPException(status_code=503, detail="Public database statistics are unavailable.")
 
-
 class CollegeCard(BaseModel):
     id: str
     institution_code: str
@@ -402,23 +360,17 @@ class CollegeCard(BaseModel):
     has_website: bool = False
     drawer: Optional[dict] = None
 
-
 class SearchResponse(BaseModel):
     total: int
     page: int
     page_size: int
     results: list[CollegeCard]
 
-
 def _search_metadata(engine, course: str, institution_codes: list[str]) -> tuple[dict[str, dict], dict[str, dict], dict[str, bool]]:
-
 
     """Fetch the extra college-card and drawer metadata for only the requested result-page institutions.
 
-
-
     Connections: The search handler calls this after SQL pagination so metadata work stays bounded to the visible page.
-
 
     """
 
@@ -558,7 +510,6 @@ def college_trend_options(
         ]
     return {"institution_code": institution_code, "course": course, "options": options}
 
-
 @router.get("/colleges/{institution_code}/trend")
 def college_trend(
     request: Request,
@@ -618,7 +569,6 @@ def college_trend(
             "rank": int(row[7]) if row[7] is not None else None,
         })
     return {"course": course, "college": institution_code, "groups": list(groups.values())}
-
 
 @router.get("/colleges/{institution_code}/seats")
 def get_college_seats(
@@ -730,7 +680,6 @@ def get_college_seats(
         "source_order_preserved": bool(course_metadata),
     }
 
-
 @router.get("/search", response_model=SearchResponse)
 def search_colleges(
     request: Request,
@@ -761,10 +710,7 @@ def _search_colleges_uncached(course, percentile, city, sort, page, page_size) -
 
     """Run the database-backed candidate search when no valid cached response exists.
 
-
-
     Connections: Uses search_college_summary_page() for SQL aggregation/pagination, then _search_metadata() to enrich only the returned institution codes.
-
 
     """
 
@@ -935,7 +881,6 @@ def get_college_details(
         "quotas": sorted(list(quotas)),
         "history": history_by_year,
     }
-
 
 @router.get("/colleges/{institution_code}/year/{year}")
 def get_college_year_runtime(request: Request, institution_code: str, year: int, course: str = Query(...)):
