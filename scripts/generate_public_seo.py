@@ -9,9 +9,9 @@ from xml.sax.saxutils import escape
 # Deployment-specific crawler files
 # ----------------------------------------------------------------------
 def main():
-    """Generate robots.txt and sitemap.xml for the supplied HTTPS production domain.
+    """Generate robots.txt and sitemap.xml for one explicitly supplied HTTPS production domain.
 
-    Connections: The deployment operator runs this after the public site and SEO pages are present; it excludes admin/private routes and writes canonical public HTML URLs only.
+    Connections: The deployment workflow runs this after site generation; only canonical public HTML pages are included in the sitemap.
     """
 
     ap=argparse.ArgumentParser()
