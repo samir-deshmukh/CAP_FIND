@@ -117,9 +117,12 @@ def _page_from(row: dict):
     return int(v) if v.isdigit() else None
 
 def _resolve_cutoff_dimensions(raw: dict):
-    """Resolve category, section and stage values from one raw cutoff record.
+    """Resolve cutoff category, section and stage without inventing source context.
 
-    Connections: The cutoff insert helper uses this to normalize source fields without inventing missing context.
+    The trusted validator accepts a blank section because the category suffix
+    already encodes H/O/S, and maps a blank stage to the explicit canonical
+    value Unknown. The import path must use the same rules; otherwise a valid
+    PDF row with a merged or visually inherited blank cell could be quarantined.
     """
 
     from scripts.category_codes import is_category_code
