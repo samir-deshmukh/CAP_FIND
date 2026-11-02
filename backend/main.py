@@ -1518,16 +1518,13 @@ def _local_worker_fail(job_id: int, message: str):
 
 
 def _reserve_local_artifact_worker(connection, job_id: int) -> None:
-
-
     """Reserve the database worker lease before accepting an extracted CSV artifact.
-
-
 
     Connections: Prevents another worker from claiming the same import while server-side validation and staging begin.
 
+    """
 
-    """connection.execute(
+    connection.execute(
         "UPDATE import_jobs SET worker_id=?,worker_lease_until=CURRENT_TIMESTAMP + INTERVAL '2 minutes',updated_at=CURRENT_TIMESTAMP WHERE id=?",
         (_WORKER_ID, job_id),
     )
@@ -1540,16 +1537,13 @@ def _reserve_local_artifact_worker(connection, job_id: int) -> None:
 def _process_local_import_background(job_id: int, artifact_path: str,
                                      data_type: str, family: str, year: int,
                                      round_name: str | None, summary: dict):
-
-
     """Validate and stage an artifact returned by the local extraction worker.
-
-
 
     Connections: Reuses the existing import pipeline and writes job progress/events for the admin interface.
 
+    """
 
-    """worker_id = _WORKER_ID
+    worker_id = _WORKER_ID
     heartbeat_stop = threading.Event()
     heartbeat_thread = None
     try:
@@ -2121,13 +2115,13 @@ def _csv_header(path: Path):
         except StopIteration: return set()
 
 def _process_csv_import_background(job_id: int):
-
     """Validate and stage a canonical CSV through the same durable import workflow.
-
 
     Connections: The queue worker calls this for CSV jobs so they do not enter the PDF parser.
 
-    """with _IMPORT_PROCESS_LOCK:
+    """
+
+    with _IMPORT_PROCESS_LOCK:
         with connect() as connection:
             job = connection.execute('SELECT * FROM import_jobs WHERE id=?', (job_id,)).fetchone()
             if not job or job['status'] not in {'QUEUED','EXTRACTING','FAILED','CANCELLED','REVIEW_REQUIRED'}: return
@@ -2263,13 +2257,13 @@ def upload_csv(request: Request, background_tasks: BackgroundTasks, file: Upload
         raise
 
 def _resolver_server_busy():
-
     """Check whether the server is already occupied by memory-heavy import processing.
-
 
     Connections: The resolver uses this guard to avoid competing with the serialized import worker on the small web instance.
 
-    """with connect() as c:
+    """
+
+    with connect() as c:
         active = c.execute(
             "SELECT COUNT(*) AS n FROM import_jobs WHERE status IN ('RECEIVED','IDENTIFIED','EXTRACTING','NORMALIZING','VALIDATING','COMPARING')"
         ).fetchone()['n']
@@ -2290,16 +2284,13 @@ def _resolver_server_busy():
 
 
 def _resolve_one_import_background(job_id: int):
-
-
     """Run one automatic college-website lookup in a short-lived child process.
-
-
 
     Connections: Keeps resolver memory use separate from the FastAPI web process and returns the result to the resolver workflow.
 
+    """
 
-    """try:
+    try:
         busy, reason = _resolver_server_busy()
         if busy:
             log.info('Website resolver deferred after import %s: %s', job_id, reason)
@@ -2344,16 +2335,13 @@ def _resolve_one_import_background(job_id: int):
 
 
 def _resolve_one_manual_resolver_step(status_filter, exclude_codes, institution_code):
-
-
     """Run one manually requested website lookup in a short-lived child process.
-
-
 
     Connections: The resolver UI uses this bounded step for an individual college rather than loading the full resolver workload into the web process.
 
+    """
 
-    """env = os.environ.copy()
+    env = os.environ.copy()
     env.setdefault('PYTHONIOENCODING', 'utf-8')
     env.setdefault('PYTHONUTF8', '1')
     env.setdefault('OMP_THREAD_LIMIT', '1')
@@ -2383,30 +2371,24 @@ def _resolve_one_manual_resolver_step(status_filter, exclude_codes, institution_
 
 
 def _process_import_background(job_id: int):
-
-
     """Start one import in the background while respecting the global processing lock.
-
-
 
     Connections: Called by queue/retry paths so memory-heavy PDF processing does not overlap.
 
+    """
 
-    """with _IMPORT_PROCESS_LOCK:
+    with _IMPORT_PROCESS_LOCK:
         _process_import_background_locked(job_id)
 
 
 def _process_import_background_locked(job_id: int):
-
-
     """Run extraction, normalization, validation and staging while the import lock is held.
-
-
 
     Connections: Uses the admin processing pipeline and updates PostgreSQL job state/events; production publishing remains a separate approval step.
 
+    """
 
-    """with connect() as connection:
+    with connect() as connection:
         job = connection.execute('SELECT * FROM import_jobs WHERE id=?', (job_id,)).fetchone()
         if not job:
             return
