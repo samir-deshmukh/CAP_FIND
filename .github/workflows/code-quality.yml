@@ -37,7 +37,7 @@ jobs:
         run: |
           git fetch origin "$BASE_REF" --depth=1
           mapfile -t python_files < <(git diff --name-only "origin/$BASE_REF...HEAD" -- '*.py' | while IFS= read -r file; do
-            if [ -f "$file" ]; then printf '%s\\n' "$file"; fi
+            if [ -f "$file" ]; then printf '%s\n' "$file"; fi
           done)
           if [ "${#python_files[@]}" -eq 0 ]; then
             echo "No changed Python files."
