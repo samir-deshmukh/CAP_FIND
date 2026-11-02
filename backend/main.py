@@ -33,7 +33,11 @@ IMPORTS.mkdir(parents=True, exist_ok=True)
 # Application lifecycle and durable import queue
 # ----------------------------------------------------------------------
 def _recover_interrupted_imports():
-    """Requeue jobs whose database lease expired; never steal a live worker's job."""
+    """Recover jobs whose database worker lease has expired without taking over live work.
+
+    Jobs with saved staging/results are held for review; only jobs with a retained
+    source and no saved output are requeued. Missing-source/local-artifact cases fail safely.
+    """
     with connect() as connection:
         rows = connection.execute(
             "SELECT j.id,j.stored_path,j.original_filename,j.data_type,EXISTS(SELECT 1 FROM local_worker_receipts r WHERE r.job_id=j.id) AS local_artifact_received FROM import_jobs j LEFT JOIN import_worker_leases l ON l.job_id=j.id WHERE (j.status IN ('EXTRACTING','NORMALIZING','VALIDATING','COMPARING') OR (j.status='PAUSED' AND (COALESCE(j.stored_path,'') LIKE 'local://%' OR EXISTS(SELECT 1 FROM local_worker_receipts r WHERE r.job_id=j.id)))) AND (COALESCE(l.lease_until,j.worker_lease_until,(SELECT MAX(e.created_at)+INTERVAL '2 minutes' FROM import_events e WHERE e.job_id=j.id AND e.event_type='LOCAL_EXTRACT')) IS NULL OR COALESCE(l.lease_until,j.worker_lease_until,(SELECT MAX(e.created_at)+INTERVAL '2 minutes' FROM import_events e WHERE e.job_id=j.id AND e.event_type='LOCAL_EXTRACT')) < CURRENT_TIMESTAMP) ORDER BY j.id FOR UPDATE OF j SKIP LOCKED"
