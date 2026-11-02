@@ -354,6 +354,7 @@ class CollegeCard(BaseModel):
     drawer: Optional[dict] = None
 
 class SearchResponse(BaseModel):
+    """Paginated search response returned to the public frontend."""
     total: int
     page: int
     page_size: int
