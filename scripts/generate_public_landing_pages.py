@@ -11,23 +11,50 @@ from urllib.parse import quote
 
 BASE = "https://cetfind.onrender.com"
 
+# ----------------------------------------------------------------------
+# Safe HTML helpers and static public-page generation
+# ----------------------------------------------------------------------
 def esc(v): return html.escape(str(v or ""), quote=True)
+    """Escape a value before placing it in generated HTML or an HTML attribute.
+
+    Connections: shell() and page templates use this for names and descriptions sourced from the public API snapshot.
+    """
 
 def slug(v):
+    """Convert a college or city label into a stable URL/file-name segment.
+
+    Connections: main() uses this when creating city and college SEO page paths.
+    """
+
     s = re.sub(r"[^a-z0-9]+", "-", str(v).lower()).strip("-")
     return s or "item"
 
 def years(rows):
+    """Collect the distinct historical years present in the supplied college records.
+
+    Connections: main() uses this to display data coverage on course, city and college pages.
+    """
+
     ys = {int(h["year"]) for r in rows for h in r.get("history", [])}
     return sorted(ys)
 
 def shell(title, description, canonical, body, schema=None):
+    """Wrap one generated page body in the shared HTML head, metadata, styles and optional structured data.
+
+    Connections: main() calls this for every course, city and college page so canonical URLs and page metadata stay consistent.
+    """
+
     ld = ""
     if schema:
         ld = '<script type="application/ld+json">' + json.dumps(schema, ensure_ascii=False) + '</script>'
     return f'''<!doctype html><html lang="en-IN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(title)}</title><meta name="description" content="{esc(description)}"><meta name="robots" content="index, follow, max-image-preview:large"><link rel="canonical" href="{esc(canonical)}"><meta property="og:type" content="website"><meta property="og:title" content="{esc(title)}"><meta property="og:description" content="{esc(description)}"><meta property="og:url" content="{esc(canonical)}"><meta property="og:site_name" content="CETFind"><style>body{{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:#f7f6f1;color:#111;line-height:1.65}}main{{max-width:980px;margin:auto;padding:42px 22px 80px}}a{{color:#111}}.ey{{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#777}}h1{{font-size:clamp(36px,6vw,62px);line-height:1.08;letter-spacing:-.035em;margin:10px 0 15px}}h2{{margin-top:34px;line-height:1.2}}.lead{{font-size:18px;color:#444;max-width:780px}}.card{{background:#fff;border:1px solid #ddd8ce;border-radius:16px;padding:22px;margin:16px 0}}.grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}}.stat{{background:#fff;border:1px solid #ddd8ce;border-radius:14px;padding:18px}}.num{{font-size:28px;font-weight:700}}.muted{{color:#666;font-size:13px}}ul{{padding-left:22px}}@media(max-width:700px){{.grid{{grid-template-columns:1fr}}}} </style>{ld}</head><body><main><a href="{BASE}/">← Back to CETFind</a>{body}</main></body></html>'''
 
 def main():
+    """Generate course, city and college landing pages from a supplied public API snapshot.
+
+    Connections: The operator runs this after publication; it writes static HTML and a manifest under site/seo/ without inventing records absent from the snapshot.
+    """
+
     ap=argparse.ArgumentParser(); ap.add_argument('--input',required=True); ap.add_argument('--site',default='site'); args=ap.parse_args()
     records=json.loads(Path(args.input).read_text())
     if not records: raise SystemExit('No records supplied')
