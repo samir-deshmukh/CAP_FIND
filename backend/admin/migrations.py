@@ -1,6 +1,16 @@
+"""Idempotent PostgreSQL schema additions for the admin/import workflow.
+
+backend.main runs ensure_part4_schema() during startup after the base admin and
+public schemas have been initialized by backend.admin.db.
+"""
+
 from .db import connect
 
 def ensure_part4_schema():
+    """Create or extend tables and indexes required by current admin workflows.
+
+    Connections: Called during FastAPI startup; uses backend.admin.db.connect() to apply PostgreSQL DDL safely and idempotently.
+    """
     # The PostgreSQL schema is created idempotently at startup. This function
     # remains as a compatibility hook for existing admin publish code.
     with connect() as c:
