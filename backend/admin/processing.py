@@ -18,6 +18,8 @@ WORK_ROOT = BASE / "data" / "import_work"
 STAGING_ROOT = BASE / "data" / "import_staging"
 
 class ImportCancelled(Exception):
+    """Signal that an import job was cancelled at a safe processing checkpoint."""
+
     pass
 
 # ----------------------------------------------------------------------
