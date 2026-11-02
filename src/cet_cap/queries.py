@@ -49,11 +49,13 @@ def search_cutoffs_for_course(
     percentage: float,
     program_family: str,
 ) -> pd.DataFrame:
-    """Return every matching cutoff row for the legacy full-result search path.
+    """Return every qualifying cutoff row for the legacy full-result search path.
 
-    Connections: Older search code in src/cet_cap/search.py performs city filtering
-    and per-college summarization in pandas; the current public API uses the
-    bounded search_college_summary_page() path instead.
+    This query is deliberately not filtered by category or city: it returns
+    all year/round/section/stage rows in the program family whose cutoff the
+    candidate's percentage clears. The older src/cet_cap/search.py path then
+    filters by city and summarizes each college in pandas. New public searches
+    should use the bounded search_college_summary_page() query instead.
     """
     query = text(f'''
         SELECT
@@ -90,9 +92,10 @@ def search_college_summary(
 ) -> pd.DataFrame:
     """Return one SQL-aggregated row per eligible college.
 
-    Connections: The public API's search orchestration can use this helper for
-    full summaries; the current paginated endpoint uses search_college_summary_page()
-    so only the requested result page reaches pandas.
+    Both city filtering and per-college aggregation happen in PostgreSQL, so
+    the API does not need to load the full cutoff dataset into pandas for a
+    normal public search. Use search_college_summary_page() when pagination is
+    required.
     """
     city_clause = ""
     params = {"percentage": percentage, "program_family": program_family}
@@ -134,8 +137,9 @@ def search_college_summary_page(
 ) -> tuple[pd.DataFrame, int]:
     """Aggregate, sort, count and paginate candidate results in PostgreSQL.
 
-    Connections: backend.api._search_colleges_uncached() calls this helper, then
-    enriches only the returned institution codes before sending JSON to the browser.
+    Only the requested page reaches pandas, keeping normal public-search
+    memory use bounded as the cutoff dataset grows. The API then enriches the
+    institution codes on that page before returning JSON to the browser.
     """
     city_clause = ""
     params = {"percentage": percentage, "program_family": program_family,
@@ -239,10 +243,12 @@ def seat_matrix_for_institute(
     institution_code: str,
     program_family: str,
 ) -> pd.DataFrame:
-    """Return the latest seat-matrix rows without mixing different capture years.
+    """Return seat rows for the most recent capture year for this institute/course.
 
-    Connections: The public API uses this query for college seat details; the
-    result keeps sanctioned-total rows separate from category allocation rows.
+    Older years are excluded rather than summed, because adding yearly seat
+    counts would overstate current capacity. Sanctioned-total rows remain in
+    the result with is_total=True so the UI can display them separately from
+    category allocations instead of hiding or double-counting them.
     """
     query = text('''
         SELECT allocation_lane, base_category, is_total, is_ladies, seats, capture_year
@@ -268,11 +274,13 @@ def find_eligible_colleges(
     year: int | None = None,
     round_no: int | None = None,
 ) -> pd.DataFrame:
-    """Return colleges matching the candidate's exact category and course filters.
+    """Return colleges whose cutoff matches the candidate's exact category and course.
 
-    Connections: Internal eligibility/search callers pass the candidate's
-    percentile and optional year/round; PostgreSQL returns matching cutoff rows.
-    The query does not silently substitute a broader category.
+    Results are ordered from the most competitive (highest qualifying cutoff)
+    downward. The query uses the exact (base_category, is_ladies) pair and does
+    not silently fall back to a broader category such as OPEN for a reserved-
+    category candidate; that would be a separate, more permissive eligibility rule.
+    Optional year and round filters further restrict the result.
     """
     where = [
         'c.percentile <= :percentile',
