@@ -955,6 +955,17 @@ def _seat_import_whitelists():
     return load_whitelists(BASE / "data" / "reference")
 
 
+def _source_pdf_for_record(raw: dict, fallback: str) -> str:
+    """Prefer row-level source provenance, falling back to the uploaded file name.
+
+    Connections: approve_import() uses this for cutoff and seat facts so CSV
+    imports retain the original PDF named in each normalized source row.
+    """
+
+    source = str(raw.get("source_pdf") or "").strip()
+    return source or str(fallback or "").strip()
+
+
 def _insert_cutoff_from_json(conn, raw, job, source_pdf, reference_cache=None):
     """Convert one staged cutoff record into normalized PostgreSQL reference and fact rows.
 
@@ -1258,11 +1269,12 @@ def approve_import(conn, job_id: int, actor_user_id: int, notes: str = ""):
                                f"Writing 0 of {total_rows:,} staged records")
         for r in _iter_staged_rows(conn,job_id,dtype):
             raw=json.loads(r["normalized_json"])
+            record_source_pdf = _source_pdf_for_record(raw, source_pdf)
             if dtype=="CUTOFFS":
-                rid, after=_insert_cutoff_from_json(conn,raw,job,source_pdf,reference_cache)
+                rid, after=_insert_cutoff_from_json(conn,raw,job,record_source_pdf,reference_cache)
                 table="cutoffs"
             else:
-                rid, after=_insert_seat_from_json(conn,raw,job,source_pdf,reference_cache)
+                rid, after=_insert_seat_from_json(conn,raw,job,record_source_pdf,reference_cache)
                 table="seats"
                 metadata = raw.get("course_metadata")
                 if metadata:
