@@ -4,7 +4,7 @@
 
 ### Document CETFind application and test code
 - **Branch / PR:** `docs/admin-ui-formatting` / [Draft PR #2](https://github.com/samir-deshmukh/CAP_FIND/pull/2)
-- **Scope:** Add concise module, class and function documentation across the FastAPI application, admin services, public API/query layer, local and remote workers, PDF and seat-matrix extraction, validation, ingestion, resolver and derived-data scripts. Add purpose descriptions to test modules and section comments around multi-stage workflows.
+- **Scope:** Add concise module, class and function documentation across the FastAPI application, admin services, public API/query layer, local and remote workers, PDF and seat-matrix extraction, validation, ingestion, resolver and derived-data scripts. Add purpose descriptions to test modules, comments to the public frontend JavaScript helpers, SQL schema sections and local-worker shell launchers.
 - **Connections documented:** Explain how frontend pages call API routes, how routes delegate to admin services/workers, how extractors feed validators and staging, how PostgreSQL stores job and public data, and how review/approval/publishing uses those records.
 - **Formatting:** Normalize selected Python spacing and expand a few one-line helper definitions for readable docstrings. Embedded frontend templates were not intentionally redesigned.
 - **Validation:** Latest GitHub Actions run: Code Quality **passed**, including formatting, linting, tests and coverage gate; Secret Scan **passed**. An earlier test-collection issue caused by module-comment placement was corrected before the passing run.
