@@ -11,12 +11,22 @@ ZERO_CUTOFF_ARTIFACT_FILTER = 'NOT (c.rank_number = 0 AND c.percentile = 0.0)'
 
 
 def available_years(engine: Engine) -> list[int]:
+    """List the cutoff years currently stored in PostgreSQL.
+
+    Connections: Query callers use this helper to populate year filters from the
+    source cutoff table rather than maintaining a fixed list in the frontend.
+    """
     with engine.connect() as conn:
         rows = conn.execute(text('SELECT DISTINCT year FROM cutoffs ORDER BY year DESC'))
         return [r[0] for r in rows]
 
 
 def available_program_families(engine: Engine) -> list[str]:
+    """List distinct course families represented by imported programs.
+
+    Connections: Internal query callers use this database-backed list when they
+    need supported program families; it does not create or modify program rows.
+    """
     with engine.connect() as conn:
         rows = conn.execute(
             text('SELECT DISTINCT program_family FROM programs ORDER BY program_family'))
@@ -24,6 +34,11 @@ def available_program_families(engine: Engine) -> list[str]:
 
 
 def available_categories(engine: Engine) -> list[str]:
+    """List the canonical category codes stored in the reference table.
+
+    Connections: Query callers use these values to build category filters from
+    PostgreSQL rather than duplicating the category list in application code.
+    """
     with engine.connect() as conn:
         rows = conn.execute(text('SELECT base_code FROM base_categories ORDER BY base_code'))
         return [r[0] for r in rows]
@@ -34,13 +49,11 @@ def search_cutoffs_for_course(
     percentage: float,
     program_family: str,
 ) -> pd.DataFrame:
-    """Legacy full-result query retained for internal compatibility. New public
-    searches should use the bounded summary-page query below. Deliberately NOT filtered by
-    category or city — every category/year/round/section/stage row for
-    this program family that the candidate's percentage clears, for
-    every institute, regardless of location. src/cet_cap/search.py then
-    does city filtering and per-college summarization on this in pandas,
-    for the older full-result search path.
+    """Return every matching cutoff row for the legacy full-result search path.
+
+    Connections: Older search code in src/cet_cap/search.py performs city filtering
+    and per-college summarization in pandas; the current public API uses the
+    bounded search_college_summary_page() path instead.
     """
     query = text(f'''
         SELECT
@@ -75,10 +88,11 @@ def search_college_summary(
     program_family: str,
     city: str | None = None,
 ) -> pd.DataFrame:
-    """Return one aggregated row per eligible college directly from PostgreSQL.
+    """Return one SQL-aggregated row per eligible college.
 
-    City filtering and aggregation happen in SQL so the API never loads the
-    full cutoff dataset into pandas for a normal public search.
+    Connections: The public API's search orchestration can use this helper for
+    full summaries; the current paginated endpoint uses search_college_summary_page()
+    so only the requested result page reaches pandas.
     """
     city_clause = ""
     params = {"percentage": percentage, "program_family": program_family}
@@ -118,10 +132,10 @@ def search_college_summary_page(
     page: int = 1,
     page_size: int = 25,
 ) -> tuple[pd.DataFrame, int]:
-    """Aggregate, sort, count and paginate in PostgreSQL.
+    """Aggregate, sort, count and paginate candidate results in PostgreSQL.
 
-    Only the requested page reaches pandas, keeping public search CPU and
-    memory bounded as the cutoff dataset grows.
+    Connections: backend.api._search_colleges_uncached() calls this helper, then
+    enriches only the returned institution codes before sending JSON to the browser.
     """
     city_clause = ""
     params = {"percentage": percentage, "program_family": program_family,
@@ -225,17 +239,10 @@ def seat_matrix_for_institute(
     institution_code: str,
     program_family: str,
 ) -> pd.DataFrame:
-    """Seat matrix for the detail panel: one row per (allocation_lane,
-    base_category, is_ladies) at the MOST RECENT capture_year on record
-    for this institute/program combination — older years are dropped
-    rather than summed, since summing seat counts across years would
-    overstate current capacity.
+    """Return the latest seat-matrix rows without mixing different capture years.
 
-    is_total rows are NOT excluded — they're returned with
-    is_total=True so the UI can show the lane's actual sanctioned total
-    as its own clearly-labeled row instead of either hiding it or
-    silently adding it into the per-category rows (which would
-    double-count capacity).
+    Connections: The public API uses this query for college seat details; the
+    result keeps sanctioned-total rows separate from category allocation rows.
     """
     query = text('''
         SELECT allocation_lane, base_category, is_total, is_ladies, seats, capture_year
@@ -261,14 +268,11 @@ def find_eligible_colleges(
     year: int | None = None,
     round_no: int | None = None,
 ) -> pd.DataFrame:
-    """Colleges/programs a candidate with the given percentile and
-    category would qualify for, most competitive (highest cutoff) first.
+    """Return colleges matching the candidate's exact category and course filters.
 
-    Filters to the exact (base_category, is_ladies) combination the
-    candidate belongs to — this does NOT fall back to broader categories
-    (e.g. a candidate in a reserved category is not shown OPEN-category
-    cutoffs), since that's a distinct, more permissive eligibility rule
-    a candidate would need to explicitly ask for, not a default.
+    Connections: Internal eligibility/search callers pass the candidate's
+    percentile and optional year/round; PostgreSQL returns matching cutoff rows.
+    The query does not silently substitute a broader category.
     """
     where = [
         'c.percentile <= :percentile',
