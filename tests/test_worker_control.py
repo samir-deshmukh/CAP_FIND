@@ -1,3 +1,5 @@
+"""Tests for local extraction worker progress checkpoints, pause waits and cancellation handling."""
+
 import json
 import threading
 import time
