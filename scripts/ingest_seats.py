@@ -11,13 +11,26 @@ from category_codes import is_category_code
 
 REQUIRED_COLUMNS=['source_pdf','page','institution_code','choice_code','allocation_type','category','gender','seats']
 
+# ----------------------------------------------------------------------
+# Seat-matrix identity checks and database ingestion
+# ----------------------------------------------------------------------
 def canonical_institution_code(institution_code_raw: str, choice_code: str) -> str:
+    """Derive the five-digit institute code from the choice code and reject a conflicting supplied code.
+
+    Connections: ingest_file() uses this check before writing a seat row so the institute and branch identifiers cannot silently disagree.
+    """
+
     from_choice=choice_code[:5]
     if institution_code_raw.strip() and institution_code_raw.strip().zfill(5)!=from_choice:
         raise ValueError(f'institution_code mismatch: column={institution_code_raw.strip().zfill(5)} vs choice_code prefix={from_choice}')
     return from_choice
 
 def ingest_file(conn,path,year,valid_cats,lane_map,alias_map):
+    """Load one validated seat-matrix CSV into PostgreSQL and record every skipped, duplicate or failed row.
+
+    Connections: main() calls this for each file after loading category/lane aliases; validate_seats.py supplies the filename and category rules.
+    """
+
     meta=parse_filename(path)
     if not meta: raise ValueError(f'{path.name}: invalid seat filename')
     family=meta['family']; df=pd.read_csv(path,dtype=str,keep_default_na=False,encoding='utf-8-sig')
@@ -29,6 +42,11 @@ def ingest_file(conn,path,year,valid_cats,lane_map,alias_map):
         conn.execute(text('INSERT INTO staging_seats(source_file,raw_row) VALUES(:f,:r)'),{'f':path.name,'r':row.to_json()})
         cat=row['category'].strip(); lane_raw=row['allocation_type'].strip()
         def err(reason): conn.execute(text('''INSERT INTO seats_ingest_errors(source_file,source_page,institution_code,choice_code,raw_allocation_type,raw_category,reason) VALUES(:f,:p,:i,:c,:l,:cat,:r)'''),{'f':path.name,'p':page,'i':row['institution_code'],'c':row['choice_code'],'l':lane_raw,'cat':cat,'r':reason})
+            """Record why one seat-matrix source row was quarantined, duplicated or failed.
+
+            Connections: The nested helper writes to seats_ingest_errors with the original institute, choice code and source category/lane.
+            """
+
         if cat in KNOWN_BAD_CATEGORY_VALUES:
             skip+=1; err('QUARANTINED_EXTRACTION_ANOMALY'); continue
         try:
@@ -51,6 +69,11 @@ def ingest_file(conn,path,year,valid_cats,lane_map,alias_map):
     return read,ins,skip,dup,fail
 
 def main():
+    """Load seat-matrix CSVs for one required capture year and reconcile all row outcomes.
+
+    Connections: This CLI bootstraps the schema, seeds allocation lanes, calls ingest_file() and fails if read rows do not equal inserted, skipped, duplicate and failed totals.
+    """
+
     ap=argparse.ArgumentParser(description=__doc__); ap.add_argument('raw_dir',nargs='?',default='data/raw/seats'); ap.add_argument('--year',type=int,required=True); ap.add_argument('--db-url',default=None); args=ap.parse_args()
     engine=engine_for(args.db_url); bootstrap_schema(engine); ref=Path('data/reference'); valid,lane,alias=load_whitelists(ref); paths=sorted(Path(args.raw_dir).glob('*.csv'))
     if not paths: raise SystemExit(f'No CSVs in {args.raw_dir}')
