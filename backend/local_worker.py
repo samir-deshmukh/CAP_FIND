@@ -219,12 +219,11 @@ def _cleanup_extraction_outputs(outdir: Path, keep_artifact: Path) -> None:
 
 
 def _finish_server_staging(state: dict) -> None:
-    """Wait for server staging, keep progress/heartbeat current, then finalize the job.
+    """Wait for server staging, then clean local outputs and finalize the job.
 
-    The extractor may spend time on PDF metadata or OCR without producing a
-    page-progress file. The worker continues notifying the backend during
-    those intervals, then cleans local intermediates after the staging result
-    is known.
+    _process_job() starts _monitor_job_progress() separately because PDF
+    metadata/OCR work may not produce a page-progress file. This function polls
+    for the backend's staging result before releasing the worker slot.
     """
 
     result = _wait_for_server_staging(state)
