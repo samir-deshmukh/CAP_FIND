@@ -2112,7 +2112,7 @@ function enhanceSelect(selectEl, opts = {}) {
     rebuildList("");
   }
 
-  // Close the custom option panel and restore focus to its trigger when appropriate.
+  // Close the custom option panel and mark its trigger as collapsed.
   function close() {
     wrap.classList.remove("open", "open-up");
     btn.setAttribute("aria-expanded", "false");
@@ -3375,7 +3375,7 @@ function createTrendsController(ids) {
     PWD: "PWD",
     DEF: "DEF"
   };
-  // Group the source-ordered seat rows by their category for table rendering.
+  // Preserve the API's source-PDF row order; this helper intentionally does not regroup or sort rows.
   function seatRowsByCategory(rows) {
     // The API returns rows in source-PDF order. Do not sort or whitelist the
     // category names here: that used to hide valid categories and reorder the
@@ -3789,7 +3789,7 @@ let drawerTrends = null;
 
   const feedbackModal=document.getElementById("feedbackModal"),feedbackOpen=document.getElementById("feedbackOpen"),feedbackClose=document.getElementById("feedbackClose"),feedbackCancel=document.getElementById("feedbackCancel"),feedbackMessage=document.getElementById("feedbackMessage"),feedbackStatus=document.getElementById("feedbackStatus"),feedbackSubmit=document.getElementById("feedbackSubmit"),feedbackRating=document.getElementById("feedbackRating"),feedbackWebsite=document.getElementById("feedbackWebsite");
   let feedbackScore=null;
-  // Close the feedback panel and restore the page's normal interaction state.
+  // Close the feedback panel and mark it hidden to assistive technology.
   function closeFeedback(){feedbackModal.classList.remove("open");feedbackModal.setAttribute("aria-hidden","true");}
   feedbackOpen.addEventListener("click",()=>{feedbackModal.classList.add("open");feedbackModal.setAttribute("aria-hidden","false");feedbackStatus.textContent="";setTimeout(()=>feedbackMessage.focus(),0)});
   feedbackClose.addEventListener("click",closeFeedback);feedbackCancel.addEventListener("click",closeFeedback);
