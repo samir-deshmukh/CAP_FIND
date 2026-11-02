@@ -1235,7 +1235,7 @@ def audit_page(rows) -> str:
 def feedback_page(rows) -> str:
     """Render the feedback records supplied by the backend route.
 
-    The page uses the shared API helper to load and update the feedback inbox in the browser.
+    The browser filters the supplied records and periodically reloads the inbox through the shared API helper.
     """
     data =json.dumps(rows,ensure_ascii=False,default=str).replace('</','<\\/')
     body = '<div class="title"><div><h1>Public Feedback</h1></div><div class="live"><span class="dot"></span>Live inbox</div></div><div class="grid4"><div class="card metric"><div class="label">Total</div><div class="value" id="total">0</div></div><div class="card metric"><div class="label">New</div><div class="value" id="newCount">0</div></div><div class="card metric"><div class="label">Reviewed</div><div class="value" id="reviewed">0</div></div><div class="card metric"><div class="label">Resolved</div><div class="value" id="resolved">0</div></div></div><div class="card panel" style="margin-top:14px"><div class="toolbar"><div class="filters"><input id="q" class="input" placeholder="Search feedback…"></div></div><div class="tablewrap"><table class="table feedback-table"><thead><tr><th>Time</th><th>Rating</th><th>Feedback</th><th>Status</th></tr></thead><tbody id="list"></tbody></table></div></div>'
