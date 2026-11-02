@@ -190,9 +190,11 @@ def get_institute_header(
 # native-text pages and most scanned-with-visible-gridlines pages).
 # ----------------------------------------------------------------------
 def find_course_header_field_names(header_row: List[Optional[str]]) -> List[str]:
-    """Read the numeric course-field names from the table's own header row.
+    """Derive numeric field names from each course's own header row.
 
-    Connections: parse_course_block() uses these names so different courses/PDF versions can expose different seat columns.
+    The expected header begins with 'Choice Code' and 'Course Name', followed
+    by one or more seat-count fields. Reading the names from the PDF allows
+    different courses and PDF versions to use different column sets.
     """
 
     cells = row_cells(header_row)
@@ -215,9 +217,11 @@ def find_course_header_field_names(header_row: List[Optional[str]]) -> List[str]
 
 
 def find_categories(category_row: List[Optional[str]]) -> List[str]:
-    """Read the reservation categories from the table's own Category row.
+    """Read reservation categories from the table's own 'Category' row.
 
-    Connections: parse_course_block() uses this list to map category seat counts without a hard-coded category whitelist.
+    This avoids hard-coding a category list and supports PDFs whose category
+    columns differ. The row is expected to contain 'Category', the category
+    names, and a trailing 'Total' column.
     """
 
     cells = row_cells(category_row)
@@ -244,9 +248,11 @@ def parse_course_block(
     affiliation_status: str,
     cap_seats: int,
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]], int]:
-    """Parse one institute/course table block into course metadata and normalized seat rows.
+    """Parse one course block beginning at its table-header row.
 
-    Connections: parse_page_tables() calls this for each detected block; its results feed the per-PDF course and long-seat outputs.
+    The block contains course metadata followed by its category seat table.
+    Returns the course summary, normalized long-form seat rows, and the next
+    table index so the caller can continue with another course block.
     """
 
     header_row = table[start]
@@ -398,9 +404,11 @@ def parse_page_tables(
     institution_name: str,
     university: str,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Extract and parse all seat-matrix course tables found on one PDF page.
+    """Parse every course block in every table found on one PDF page.
 
-    Connections: process_single_pdf() calls this on each page before using OCR text fallback for pages with missing or unusable tables.
+    A page may contain multiple tables, and a table may contain multiple
+    course rows. The parser walks every detected course header instead of
+    assuming one course or one table per page.
     """
 
     all_courses: List[Dict[str, Any]] = []
@@ -445,9 +453,11 @@ def parse_page_tables(
 # OCR fallback and single-PDF output orchestration
 # ----------------------------------------------------------------------
 def ocr_page_text(page: "pdfplumber.page.Page", dpi: int, lang: str) -> str:
-    """Render and OCR one PDF page when native table/text extraction is insufficient.
+    """Use OCR text for a best-effort metadata fallback when no seat table parses.
 
-    Connections: process_single_pdf() uses this optional fallback and passes the recognized text to fallback_parse_from_text().
+    Some pages contain institute/course headings but no reliably aligned
+    category table. This path preserves whatever header information can be
+    recovered rather than dropping the page entirely.
     """
 
     if pytesseract is None:
