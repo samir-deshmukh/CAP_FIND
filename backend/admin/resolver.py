@@ -1,3 +1,10 @@
+"""College website discovery, validation and resolver database helpers.
+
+backend.main exposes the protected resolver endpoints and backend.admin_ui
+renders the review interface. This module validates URLs, checks public DNS,
+uses grounded search results for candidates, and stores verified metadata.
+"""
+
 import csv,json,os,re,logging,urllib.parse,urllib.request,urllib.error,ipaddress,socket,http.client,ssl
 from pathlib import Path
 
@@ -7,6 +14,11 @@ CONTACTS=BASE/'data'/'reference'/'institute_contacts.csv'
 GEMINI_MODEL=os.getenv('GEMINI_RESOLVER_MODEL','gemini-2.5-flash')
 
 def valid_url(url):
+    """Normalize a candidate website URL and reject unsafe or unsupported targets.
+
+    Connections: Resolver search and verification call this before any outbound request; private IPs, local hosts and credential-bearing URLs are rejected.
+    """
+
     if not url:
         return None
     url = str(url).strip()
@@ -40,7 +52,11 @@ def valid_url(url):
 
 
 def _public_dns_target(url):
-    """Resolve once and return only public socket addresses for a pinned request."""
+    """Resolve a website hostname and return only public socket addresses.
+
+    Connections: verify_url() pins its connection to these checked addresses and repeats the check for every redirect to reduce SSRF risk.
+    """
+
     parsed = urllib.parse.urlparse(url)
     host = parsed.hostname
     if not host:
@@ -59,6 +75,11 @@ def _public_dns_target(url):
         return []
 
 def verify_url(url, college_name, timeout=7, _redirects=0):
+    """Check that a candidate website is reachable and contains evidence matching the college name.
+
+    Connections: Manual verification and resolver candidate checks call this before saving a website as verified; redirects are revalidated.
+    """
+
     url = valid_url(url)
     if not url:
         return {'ok': False, 'url': None, 'note': 'Invalid URL'}
@@ -116,7 +137,11 @@ def verify_url(url, college_name, timeout=7, _redirects=0):
         return {'ok': False, 'url': url, 'note': f'Unreachable: {type(e).__name__}'}
 
 def _same_site(a, b):
-    """Compare hostnames while allowing www/subdomains of the same site."""
+    """Compare two website hostnames while allowing www and subdomains of the same site.
+
+    Connections: Grounded Gemini verification uses this to confirm that cited pages support the proposed college domain.
+    """
+
     try:
         ha = (urllib.parse.urlparse(valid_url(a)).hostname or "").lower().removeprefix("www.")
         hb = (urllib.parse.urlparse(valid_url(b)).hostname or "").lower().removeprefix("www.")
@@ -126,7 +151,11 @@ def _same_site(a, b):
 
 
 def _json_object_from_text(text):
-    """Decode the first complete JSON object without greedy brace matching."""
+    """Extract the first complete JSON object from a model response.
+
+    Connections: Gemini resolver helpers use this to parse structured candidate data without greedy brace matching.
+    """
+
     text = str(text or "")
     for start, char in enumerate(text):
         if char != "{":
@@ -161,7 +190,11 @@ def _json_object_from_text(text):
 
 
 def _grounding_evidence(data):
-    """Extract actual Google Search citations, not URLs asserted by the model."""
+    """Extract actual Google Search grounding citations from a Gemini response.
+
+    Connections: Candidate verification uses these citations as evidence instead of trusting URLs written only in model text.
+    """
+
     evidence = []
     queries = []
     for candidate in (data or {}).get("candidates", []):
@@ -197,7 +230,11 @@ def _grounding_evidence(data):
 
 
 def _grounding_supports_site(url, evidence):
-    """Require a citation to the candidate site (or its own subdomain)."""
+    """Check whether search citations point to the candidate college website or its subdomain.
+
+    Connections: gemini_verify_candidate() uses this before accepting a candidate domain.
+    """
+
     candidate = valid_url(url)
     if not candidate:
         return False
@@ -229,7 +266,11 @@ def _grounding_supports_site(url, evidence):
 
 
 def _grounding_supports_value(value, evidence):
-    """Return true only when Google linked a response segment containing value."""
+    """Check whether a cited search result supports a requested college-name or city value.
+
+    Connections: Gemini verification uses this to reject model-generated details that are not grounded in search evidence.
+    """
+
     value = str(value or "").strip()
     if not value:
         return False
@@ -248,7 +289,11 @@ def _grounding_supports_value(value, evidence):
 
 
 def gemini_verify_candidate(college_name, candidate_url, city=None, institution_code=None):
-    """Use Gemini + Google Search to verify that a working URL belongs to the college."""
+    """Ask Gemini with Google Search grounding to verify a candidate website for a named college.
+
+    Connections: The resolver review workflow uses the result together with verify_url(); model text alone is not sufficient to mark a site verified.
+    """
+
     key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
         raise RuntimeError("GEMINI_API_KEY is not configured")
@@ -293,6 +338,11 @@ the candidate clearly belongs to the named institution.'''
 
 
 def seed_from_contacts(conn):
+    """Seed resolver records from the maintained institute contact CSV.
+
+    Connections: Admin setup and resolver routes use this as a reference source; it does not publish websites until verification rules pass.
+    """
+
     if not CONTACTS.exists():return 0
     n=0
     with CONTACTS.open(newline='',encoding='utf-8-sig') as f:
@@ -305,7 +355,11 @@ def seed_from_contacts(conn):
     return n
 
 def _reference_contacts():
-    """Load the maintained contact file, supporting both headered and legacy headerless CSVs."""
+    """Load institute contact records from the maintained CSV, including older headerless format.
+
+    Connections: Resolver seeding and city inference reuse this normalized reference data.
+    """
+
     contacts = {}
     if not CONTACTS.exists():
         return contacts
@@ -340,16 +394,20 @@ def _reference_contacts():
 
 
 def _city_key(value):
+    """Normalize a city name for consistent matching.
+
+    Connections: City inference and resolver seeding use this key to compare names without punctuation/case differences.
+    """
+
     return re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
 
 
 def infer_city_from_name(institution_name, known_cities):
-    """Infer a city only when a known city name appears as a whole phrase.
+    """Infer a city only when a known city appears as a complete phrase in the institution name.
 
-    Longest-first matching avoids choosing a short city contained in a longer
-    place name. This is a deterministic fallback, not a substitute for source
-    verification when the name does not contain a known city.
+    Connections: Resolver seeding uses the known-city list to fill missing city values without guessing from partial substrings.
     """
+
     name = " " + _city_key(institution_name) + " "
     candidates = sorted(
         {str(city).strip() for city in known_cities if str(city or '').strip()},
@@ -370,7 +428,11 @@ def infer_city_from_name(institution_name, known_cities):
 
 
 def _known_city_names(conn):
-    """Build a local city vocabulary from already populated CAP/reference rows."""
+    """Build the known-city vocabulary from existing CAP and reference rows.
+
+    Connections: seed_from_import() and resolver seeding use this list when checking whether a college name contains a city.
+    """
+
     cities = set()
     try:
         cities.update(str(r[0]).strip() for r in conn.execute(
@@ -383,12 +445,11 @@ def _known_city_names(conn):
 
 
 def seed_from_import(conn, job_id, codes_out=None):
-    """Create resolver rows from the colleges actually present in an import.
+    """Create resolver rows only for institutions present in one import job.
 
-    The PDF/import is the scope of work. Existing institute/reference data is
-    preferred for city and website; no broad external dataset is used to
-    invent unrelated resolver institutions.
+    Connections: The import processing workflow calls this after extraction so the resolver queue reflects the colleges in the staged dataset.
     """
+
     refs = _reference_contacts()
     known_cities = _known_city_names(conn)
     colleges = {}
@@ -495,7 +556,11 @@ def seed_from_import(conn, job_id, codes_out=None):
 
 
 def _update_institute_resolution(conn, code, city=None, address=None, website=None, source=None):
-    """Mirror trusted resolver fields into the institute reference when present."""
+    """Copy trusted resolver fields into the production institute reference row.
+
+    Connections: Resolver verification/edit flows call this so public college details use the accepted city, address and website values.
+    """
+
     if not (city or address or website):
         return
     conn.execute(
@@ -517,21 +582,11 @@ def _update_institute_resolution(conn, code, city=None, address=None, website=No
 
 def resolve_import_job(job_id=None, limit=None, status_filter=None, exclude_codes=None,
                        institution_code=None):
-    """Resolve a bounded number of colleges without running a long background loop.
+    """Resolve a bounded set of college websites for one import or resolver selection.
 
-    When job_id is supplied, only colleges from that import are considered.
-    When job_id is None, the resolver queue is taken from the CAP resolver table.
-    A small limit lets the admin UI process one college at a time and keeps the
-    web service responsive on small Render instances.
-
-    Order is deliberate:
-      1. existing resolver/institute/reference website
-      2. verify that URL and capture its redirect target
-      3. only then use Gemini + Google Search for unresolved colleges
-
-    City follows the same local-data-first rule. Network discovery is never
-    used to create extra institutions outside the uploaded PDF.
+    Connections: backend.main resolver endpoints call this; it updates resolver rows and returns progress rather than running an unbounded server loop.
     """
+
     from .db import connect
 
     seeded = 0
@@ -842,12 +897,11 @@ def resolve_import_job(job_id=None, limit=None, status_filter=None, exclude_code
 
 
 def _import_names_for_codes(conn, codes):
-    """Recover real institution names from retained import staging records.
+    """Recover institution names for selected codes from retained import staging records.
 
-    Only query codes whose institute name is missing or is just the code. The
-    staging payload is the original CAP-import evidence; never treat the code
-    itself as a valid display name when a better source exists.
+    Connections: Resolver seeding uses these names when a current production institute row is not yet available.
     """
+
     codes = sorted({str(code).strip() for code in codes if str(code or '').strip()})
     if not codes:
         return {}
@@ -877,12 +931,11 @@ def _import_names_for_codes(conn, codes):
 
 
 def sync_institutes_to_resolver(conn):
-    """Synchronize resolver only from institutes still backed by production data.
+    """Synchronize resolver entries from institutes still present in production data.
 
-    Older rollback flows could leave orphan institute rows behind. Those rows
-    must never reappear in the resolver queue after the underlying production
-    data has been deleted.
+    Connections: The admin resolver seed route calls this so stale/deleted institutions are not blindly reintroduced from an unrelated source.
     """
+
     refs = _reference_contacts()
     # Resolver is a derived view of production-backed institutes. Never delete
     # rows from the authoritative institutes table while merely opening this page.
@@ -1023,6 +1076,11 @@ def sync_institutes_to_resolver(conn):
 GITHUB_MAPPING_URL='https://raw.githubusercontent.com/github/india/main/Students/GCP-India.md'
 
 def sync_github_india(conn):
+    """Import candidate college website mappings from the configured GitHub India reference source.
+
+    Connections: The protected resolver seed endpoint calls this; imported URLs remain candidates and still require verification.
+    """
+
     req=urllib.request.Request(GITHUB_MAPPING_URL,headers={'User-Agent':'CET-CAP-Website-Resolver/1.0'})
     with urllib.request.urlopen(req,timeout=20) as r: text=r.read().decode('utf-8','ignore')
     n=0
@@ -1038,6 +1096,11 @@ def sync_github_india(conn):
     return n
 
 def gemini_find(college_name,city=None,excluded_url=None,institution_code=None):
+    """Search for a likely official website for one college using the configured Gemini integration.
+
+    Connections: The resolver's automatic/manual lookup routes use this to create a candidate; verify_url() and grounded checks decide whether it can be trusted.
+    """
+
     key=os.getenv('GEMINI_API_KEY','').strip()
     if not key:raise RuntimeError('GEMINI_API_KEY is not configured')
     location=f', {city}' if city else ''
