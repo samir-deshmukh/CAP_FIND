@@ -9,6 +9,7 @@ from enum import Enum
 
 class JobStatus(str, Enum):
     """Named states used by import_jobs and the admin progress interface."""
+
     RECEIVED = "RECEIVED"
     SECURITY_CHECK = "SECURITY_CHECK"
     IDENTIFIED = "IDENTIFIED"
