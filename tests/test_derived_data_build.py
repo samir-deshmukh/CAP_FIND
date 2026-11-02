@@ -1,3 +1,5 @@
+"""Tests for derived-data rebuild behavior using controlled database result and connection doubles."""
+
 import backend.main as main
 
 
