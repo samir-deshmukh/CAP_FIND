@@ -41,12 +41,12 @@ def ingest_file(conn,path,year,valid_cats,lane_map,alias_map):
         page=int(row['page']) if row['page'].strip().isdigit() else None
         conn.execute(text('INSERT INTO staging_seats(source_file,raw_row) VALUES(:f,:r)'),{'f':path.name,'r':row.to_json()})
         cat=row['category'].strip(); lane_raw=row['allocation_type'].strip()
-        def err(reason): conn.execute(text('''INSERT INTO seats_ingest_errors(source_file,source_page,institution_code,choice_code,raw_allocation_type,raw_category,reason) VALUES(:f,:p,:i,:c,:l,:cat,:r)'''),{'f':path.name,'p':page,'i':row['institution_code'],'c':row['choice_code'],'l':lane_raw,'cat':cat,'r':reason})
+        def err(reason):
             """Record why one seat-matrix source row was quarantined, duplicated or failed.
 
             Connections: The nested helper writes to seats_ingest_errors with the original institute, choice code and source category/lane.
             """
-
+            conn.execute(text('''INSERT INTO seats_ingest_errors(source_file,source_page,institution_code,choice_code,raw_allocation_type,raw_category,reason) VALUES(:f,:p,:i,:c,:l,:cat,:r)'''),{'f':path.name,'p':page,'i':row['institution_code'],'c':row['choice_code'],'l':lane_raw,'cat':cat,'r':reason})
         if cat in KNOWN_BAD_CATEGORY_VALUES:
             skip+=1; err('QUARANTINED_EXTRACTION_ANOMALY'); continue
         try:
