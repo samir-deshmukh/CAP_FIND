@@ -1,3 +1,5 @@
+"""Unit tests for cutoff parsing, category normalization, deduplication and validation helpers."""
+
 from pathlib import Path
 
 import pandas as pd
