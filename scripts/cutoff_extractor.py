@@ -167,9 +167,12 @@ PERCENT_ONLY_RE = re.compile(r"^\(\s*\d+(?:\.\d+)?\s*\)$")
 
 
 def _split_program_header_metadata(raw_name: str) -> tuple[str, str, str]:
-    """Separate status and university metadata accidentally joined to a program heading.
+    """Separate inline Status/Home University text from a program heading.
 
-    Connections: parse_structured_page() uses this to keep program names separate from institute-level metadata.
+    Some CAP PDFs place all three fields on one extracted text line. The
+    program-code regex accepts newly introduced branch names, so following
+    metadata must be stripped here rather than mistaken for part of the
+    program's identity.
     """
 
     match = re.search(r"\s+Status\s*:\s*", raw_name, re.IGNORECASE)
@@ -410,9 +413,13 @@ def update_metadata_from_line(
     metadata: Dict[str, str],
     parser_state: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
-    """Update carried document/institute metadata when a page contains a recognized heading.
+    """Update table metadata as each page line is read.
 
-    Connections: parse_structured_page() calls this as it walks page text so later rows inherit the correct context.
+    CAP PDFs can contain multiple program tables on one page, and a table can
+    continue onto the next page. A single metadata dictionary per page would
+    assign later rows to the wrong program. This line-level updater preserves
+    source order and joins wrapped program titles whose opening parenthesis
+    has not yet closed. Returns the metadata event kind when a line is consumed.
     """
 
     state = parser_state if parser_state is not None else {}
