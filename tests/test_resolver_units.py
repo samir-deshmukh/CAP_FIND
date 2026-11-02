@@ -1,3 +1,5 @@
+"""Tests for resolver URL safety, grounded evidence, city matching and institute-name recovery."""
+
 from backend.admin.resolver import valid_url, verify_url
 
 
