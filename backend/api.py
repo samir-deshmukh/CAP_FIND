@@ -61,11 +61,10 @@ _SEARCH_METADATA_TTL = 30.0
 class _TTLCache:
     """Small thread-safe TTL cache with single-flight computation.
 
-    Public data only changes when an admin publishes a release, so identical
-    requests (page-load options/stats, popular searches) can be answered from
-    memory. Concurrent misses for the same key compute once instead of
-    stampeding the database on the small free-tier instance. Exceptions are
-    never cached.
+    Admin approval, publication and rollback can change the public dataset, so
+    those workflows invalidate cached responses. Between changes, identical
+    requests can reuse results; concurrent misses share one computation.
+    Exceptions are never cached.
     """
 
     def __init__(self, max_items: int = 256):
