@@ -1,3 +1,5 @@
+"""Tests that optional PDF and OCR dependencies load only when the extraction path needs them."""
+
 from __future__ import annotations
 
 from pathlib import Path
