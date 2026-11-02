@@ -2833,7 +2833,8 @@ function bindEls() {
      The compact drawer metadata comes from the trend-options API, so
      Category/Quota controls never wait for this larger raw-row payload. ── */
   const collegeYearCache = new Map();
-  async function loadCollegeYear(course, college, year) {
+  // Fetch and cache one college's raw cutoff rows for the selected year from the public API.
+async function loadCollegeYear(course, college, year) {
     const key = `${course}:${year}:${college}`;
     if (collegeYearCache.has(key)) return collegeYearCache.get(key);
     const response = await fetch(
@@ -2851,7 +2852,8 @@ function bindEls() {
      Fetches source-ordered seat rows and official PDF metadata from
      the backend for the selected college. Powers the Seat Matrix view. */
   const seatDataCache = window.__seatDataCache || (window.__seatDataCache = new Map());
-  async function loadSeats(course, college) {
+  // Fetch and cache the selected college's source-ordered seat matrix and official PDF metadata.
+async function loadSeats(course, college) {
     const key = `${course}:${college}`;
     if (seatDataCache.has(key)) return seatDataCache.get(key);
     const response = await fetch(
@@ -3128,8 +3130,8 @@ function escapeHtml(value) {
      They only determine the highlighted column/cell. The actual rows
      remain college-specific and contain every category/section/stage
      present in the database for the selected year. */
-  async // Render the complete cutoff data available for the selected college and year.
-function renderDrawerAllData() {
+  // Render the complete cutoff data available for the selected college and year.
+async function renderDrawerAllData() {
     const meta = drawerMeta();
     if (!meta || !state.college) { showEmpty(); return; }
     const years = Array.isArray(meta.y)
@@ -3467,8 +3469,8 @@ function seatMatrixChoiceHtml(course, code, allocs, collegeName, choiceCount, me
       </section>`;
   }
 
-  async // Fetch the selected college's seat data and render its source metadata and allocation rows.
-function renderSeatMatrix() {
+  // Fetch the selected college's seat data and render its source metadata and allocation rows.
+async function renderSeatMatrix() {
     els.seatMatrixBody.innerHTML = `<p class="d-text">Loading seat matrix…</p>`;
     if (!state.course || !state.college) {
       els.seatMatrixBody.innerHTML = `<p class="d-text">Seat matrix isn't available until a course and college are loaded.</p>`;
@@ -3682,8 +3684,8 @@ function init() {
      The selected college's compact metadata is available immediately; raw
      cutoff data is loaded lazily one college+year API request at a time. Category and
      quota are highlights, not filters of the displayed PDF-style data. ── */
-  async // Restrict this controller to the college and course opened in Slide 2.
-function lockToCollege(course, collegeCode) {
+  // Restrict this controller to the college and course opened in Slide 2.
+async function lockToCollege(course, collegeCode) {
     state.course = course;
     state.branch = null;
     state.college = collegeCode;
