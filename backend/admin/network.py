@@ -12,10 +12,12 @@ from fastapi import Request
 
 
 def client_ip(request: Request) -> str:
-    """Resolve the client IP using the direct peer and explicitly trusted proxies.
+    """Return a client IP without trusting attacker-controlled forwarding headers.
 
-    Connections: Login/public rate limiters in backend.main call this helper.
-    Forwarded values are considered only when the direct peer is in CET_TRUSTED_PROXY_IPS.
+    Set CET_TRUSTED_PROXY_IPS to comma-separated proxy IPs/CIDRs only when the
+    reverse proxy is known to append the actual client address to
+    X-Forwarded-For. Forwarded values are ignored unless the direct peer is
+    inside one of those configured trusted proxy ranges.
     """
     peer = request.client.host if request.client else ""
     if not peer:
