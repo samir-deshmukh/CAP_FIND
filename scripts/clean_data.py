@@ -35,7 +35,11 @@ CATEGORY_WHITELIST_PATH = Path('data/reference/category_whitelist.csv')
 
 
 def ensure_pwd_in_whitelist():
-    """Add bare PWD as a valid base category if it's not already there."""
+    """Add bare PWD as a valid base category when the reference whitelist does not contain it.
+
+    Connections: main() runs this reference-data correction before cleaning cutoff CSVs; it does not rewrite valid PWD rows.
+    """
+
     df = pd.read_csv(CATEGORY_WHITELIST_PATH)
     if 'PWD' in set(df['base_code']):
         return False
@@ -50,6 +54,11 @@ def ensure_pwd_in_whitelist():
 
 
 def clean_file(path: Path, out_dir: Path, rejects_dir: Path):
+    """Remove unrecoverable blank-category cutoff rows from one CSV and write them to a reject file with a reason.
+
+    Connections: main() calls this for each cutoff-schema file; seat-matrix files are skipped and no category value is invented.
+    """
+
     df = pd.read_csv(path, dtype=str, keep_default_na=False, encoding='utf-8-sig')
 
     if any(c not in df.columns for c in REQUIRED_COLUMNS):
@@ -83,6 +92,11 @@ def clean_file(path: Path, out_dir: Path, rejects_dir: Path):
 
 
 def main(raw_dir: str, out_dir: str):
+    """Clean a folder of raw cutoff CSVs and report kept versus quarantined rows.
+
+    Connections: The CLI calls ensure_pwd_in_whitelist() and clean_file(); rejected rows are retained separately for audit.
+    """
+
     raw = Path(raw_dir)
     out = Path(out_dir)
     rejects = out / 'rejects'
