@@ -333,6 +333,7 @@ def _build_public_stats():
         raise HTTPException(status_code=503, detail="Public database statistics are unavailable.")
 
 class CollegeCard(BaseModel):
+    """Public college-card response model returned by the search API."""
     id: str
     institution_code: str
     name: str
