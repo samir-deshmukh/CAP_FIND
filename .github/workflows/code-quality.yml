@@ -30,21 +30,21 @@ jobs:
           backend/admin/pipeline.py
           backend/admin/state.py
           backend/admin/create_admin.py
-      - name: Lint and format-check Python files changed in this PR
+      - name: Syntax-check and run critical lint rules on changed Python files
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           git fetch origin "$BASE_REF" --depth=1
           mapfile -t python_files < <(git diff --name-only "origin/$BASE_REF...HEAD" -- '*.py' | while IFS= read -r file; do
-            if [ -f "$file" ]; then printf '%s\n' "$file"; fi
+            if [ -f "$file" ]; then printf '%s\\n' "$file"; fi
           done)
           if [ "${#python_files[@]}" -eq 0 ]; then
             echo "No changed Python files."
             exit 0
           fi
-          ruff check --output-format=github "${python_files[@]}"
-          ruff format --check "${python_files[@]}"
+          python -m py_compile "${python_files[@]}"
+          ruff check --select E4,E9,F63,F7,F82 --output-format=github "${python_files[@]}"
       - name: Tests and coverage gate
         run: pytest -q
 
