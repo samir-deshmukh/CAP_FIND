@@ -70,12 +70,26 @@ class _TTLCache:
     """
 
     def __init__(self, max_items: int = 256):
+
+        """Initialize the cache size and the locks used to coordinate concurrent requests.
+
+
+        Connections: Public endpoint handlers share this cache so repeated queries can reuse recent database results.
+
+        """
         self._max = max_items
         self._data: dict = {}
         self._locks: dict = {}
         self._guard = threading.Lock()
 
     def get_or_set(self, key, ttl: float, factory):
+
+        """Return a cached value or compute and cache it once for the requested key.
+
+
+        Connections: Endpoint handlers provide the database-backed builder; the per-key lock prevents concurrent cache misses from stampeding PostgreSQL.
+
+        """
         now = time.monotonic()
         hit = self._data.get(key)
         if hit and now - hit[0] < ttl:
@@ -103,6 +117,13 @@ class _TTLCache:
                 self._locks.pop(key, None)
 
     def clear(self):
+
+        """Remove all cached public responses.
+
+
+        Connections: The cache invalidation helper calls this after data publication or rollback.
+
+        """
         with self._guard:
             self._data.clear()
 
@@ -111,6 +132,16 @@ _PUBLIC_CACHE = _TTLCache()
 
 
 def invalidate_public_caches() -> None:
+
+
+    """Clear public response and search-metadata caches after production data changes.
+
+
+
+    Connections: The admin publishing/rollback workflow calls this so the next candidate API request reads the updated PostgreSQL data.
+
+
+    """
     """Drop every cached public answer (call after approve/publish/rollback)."""
     global PUBLIC_COURSES, _PUBLIC_COURSES_AT
     _PUBLIC_CACHE.clear()
@@ -123,6 +154,16 @@ _SEARCH_TTL = 60.0
 
 
 def available_public_courses(engine) -> list[str]:
+
+
+    """Return the course families currently present in PostgreSQL, refreshing the short-lived cache when needed.
+
+
+
+    Connections: Public search and option builders use this database-backed list instead of maintaining a hard-coded course whitelist.
+
+
+    """
     """Return cached course families; refresh periodically for new imports."""
     global PUBLIC_COURSES, _PUBLIC_COURSES_AT
     now = time.monotonic()
@@ -141,6 +182,16 @@ def available_public_courses(engine) -> list[str]:
 
 
 def check_rate_limit(request: Request):
+
+
+    """Enforce the bounded per-process request limit for the calling client.
+
+
+
+    Connections: Every public API route calls this before running its database query; client_ip() supplies the normalized client address.
+
+
+    """
     """Enforce bounded, per-process request limits per client IP."""
     ip = client_ip(request)
     now = time.monotonic()
@@ -175,6 +226,16 @@ _engine_cache = None
 
 
 def get_active_engine():
+
+
+    """Return the shared SQLAlchemy engine configured for the public API.
+
+
+
+    Connections: The engine comes from src/cet_cap/db.py and is reused by query helpers instead of creating a new pool per request.
+
+
+    """
     """Return the single configured PostgreSQL engine for public requests."""
     global _engine_cache
     if _engine_cache is None:
@@ -183,6 +244,16 @@ def get_active_engine():
 
 
 def _db_available(engine) -> bool:
+
+
+    """Check whether the configured PostgreSQL engine can execute a lightweight query.
+
+
+
+    Connections: Public endpoints use this check before returning database-dependent college data.
+
+
+    """
     """Check connectivity without hiding application/database errors."""
     try:
         with engine.connect() as conn:
@@ -193,6 +264,16 @@ def _db_available(engine) -> bool:
 
 
 def _require_public_course(course: str, engine=None) -> None:
+
+
+    """Reject a course family that is not present in the current database dataset.
+
+
+
+    Connections: Uses available_public_courses() so public API routes validate against imported data rather than a fixed list.
+
+
+    """
     if engine is None:
         engine = get_active_engine()
     if course not in available_public_courses(engine):
@@ -201,6 +282,10 @@ def _require_public_course(course: str, engine=None) -> None:
 
 @router.get("/options")
 def public_options(request: Request, response: Response):
+    """Return the city and course options needed to initialize the candidate search form.
+
+    Connections: The frontend calls GET /api/options; the cached builder reads the available values from PostgreSQL.
+    """
     """Return the bounded city/course lists needed to initialize the search UI."""
     check_rate_limit(request)
     response.headers["Cache-Control"] = "public, max-age=60"
@@ -208,6 +293,16 @@ def public_options(request: Request, response: Response):
 
 
 def _build_public_options():
+
+
+    """Build the public search-form options from current PostgreSQL records.
+
+
+
+    Connections: Called through the options cache; uses the shared engine and the database-driven course-family list.
+
+
+    """
     try:
         engine = get_active_engine()
     except Exception:
@@ -236,6 +331,10 @@ def _build_public_options():
 
 @router.get("/stats")
 def public_stats(request: Request, response: Response):
+    """Return aggregate dataset totals for the candidate website.
+
+    Connections: The frontend calls GET /api/stats; the cached builder reads counts from PostgreSQL.
+    """
     """Return public-facing totals calculated from the full database dataset."""
     check_rate_limit(request)
     response.headers["Cache-Control"] = "public, max-age=60"
@@ -243,6 +342,16 @@ def public_stats(request: Request, response: Response):
 
 
 def _build_public_stats():
+
+
+    """Calculate the public dataset totals from PostgreSQL.
+
+
+
+    Connections: Called by the stats cache and returns the counts used by the candidate-facing summary UI.
+
+
+    """
     try:
         engine = get_active_engine()
         with engine.connect() as conn:
@@ -296,6 +405,16 @@ class SearchResponse(BaseModel):
 
 
 def _search_metadata(engine, course: str, institution_codes: list[str]) -> tuple[dict[str, dict], dict[str, dict], dict[str, bool]]:
+
+
+    """Fetch the extra college-card and drawer metadata for only the requested result-page institutions.
+
+
+
+    Connections: The search handler calls this after SQL pagination so metadata work stays bounded to the visible page.
+
+
+    """
     """Fetch only metadata required by search cards in one PostgreSQL round trip.
 
     Drawer filter options are loaded lazily by the drawer's trend-options
@@ -409,6 +528,10 @@ def college_trend_options(
     institution_code: str,
     course: str = Query(...),
 ):
+    """Return the available year, category and quota filters for one college.
+
+    Connections: The college-details frontend calls this endpoint; it reads the precomputed cutoff_filter_options table in PostgreSQL.
+    """
     """Return only the precomputed category/quota/year options for one college."""
     check_rate_limit(request)
     engine = get_active_engine()
@@ -443,6 +566,10 @@ def college_trend(
     quota: Optional[str] = Query(None),
     ladies: bool = Query(False),
 ):
+    """Return historical trend points for one college and selected filters.
+
+    Connections: The frontend supplies the college, course and optional category/quota filters; PostgreSQL provides the precomputed cutoff_trend_points.
+    """
     """Return precomputed trend points for one college/filter combination."""
     check_rate_limit(request)
     engine = get_active_engine()
@@ -497,6 +624,10 @@ def get_college_seats(
     institution_code: str,
     course: str = Query(..., description="Course family (e.g. MBA)"),
 ):
+    """Return the latest source-ordered seat rows and their official course/PDF metadata for one college.
+
+    Connections: The college details UI calls this endpoint; PostgreSQL is the source, with a legacy runtime-table fallback for older imports.
+    """
     """Fetch source-ordered latest seat rows and their official PDF metadata."""
     check_rate_limit(request)
     engine = get_active_engine()
@@ -610,6 +741,10 @@ def search_colleges(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(25, ge=1, le=50, description="Items per page (max 50)"),
 ):
+    """Validate and cache a bounded candidate search request.
+
+    Connections: The frontend sends course, percentile, optional city and page settings; the uncached helper queries PostgreSQL and returns one page of CollegeCard results.
+    """
     """Searches for eligible colleges for a candidate based on percentage, course, and city.
 
     Security:
@@ -626,6 +761,16 @@ def search_colleges(
 
 
 def _search_colleges_uncached(course, percentile, city, sort, page, page_size) -> SearchResponse:
+
+
+    """Run the database-backed candidate search when no valid cached response exists.
+
+
+
+    Connections: Uses search_college_summary_page() for SQL aggregation/pagination, then _search_metadata() to enrich only the returned institution codes.
+
+
+    """
     try:
         engine = get_active_engine()
     except Exception:
@@ -709,6 +854,10 @@ def get_college_details(
     institution_code: str,
     course: str = Query(..., description="Course family (e.g. MBA)"),
 ):
+    """Return cutoff history and category/quota breakdowns for one institution and course.
+
+    Connections: The college drawer calls this endpoint; it queries PostgreSQL rows scoped to the requested institution rather than sending the full dataset.
+    """
     """Fetches cutoff trends and category breakdowns for a specific college drawer.
     Returns only data relevant to the single institution requested.
     """
