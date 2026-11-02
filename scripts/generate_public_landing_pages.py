@@ -14,11 +14,13 @@ BASE = "https://cetfind.onrender.com"
 # ----------------------------------------------------------------------
 # Safe HTML helpers and static public-page generation
 # ----------------------------------------------------------------------
-def esc(v): return html.escape(str(v or ""), quote=True)
+def esc(v):
     """Escape a value for safe insertion into generated HTML text or attributes.
 
     Connections: shell() and page templates use this for every source-derived name, city and description.
     """
+    return html.escape(str(v or ""), quote=True)
+
 
 def slug(v):
     """Convert a college or city label into a stable URL/file-name segment.
