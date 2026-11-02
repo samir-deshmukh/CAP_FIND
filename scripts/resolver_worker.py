@@ -31,10 +31,6 @@ def acquire_lock(conn):
     Connections: main() uses this before starting a resolver step so two child processes cannot run memory-heavy lookups at the same time.
     """
 
-
-    Connections: main() uses this before starting a resolver step so two child processes cannot run memory-heavy lookups at the same time.
-    """
-
     # PostgreSQL advisory locks serialize resolver children on the single
     # low-memory Render instance. Fail closed if lock state cannot be checked.
     try:
@@ -52,10 +48,6 @@ def release_lock(conn):
     Connections: main() calls this in its finally block so the next bounded resolver child can proceed.
     """
 
-
-    Connections: main() calls this in its finally block so the next bounded resolver child can proceed.
-    """
-
     try:
         conn.execute("SELECT pg_advisory_unlock(?)", (LOCK_KEY,))
     except Exception:
@@ -64,10 +56,6 @@ def release_lock(conn):
 
 def main() -> int:
     """Parse one resolver job/scan request and run at most one bounded resolver step.
-
-    Connections: backend.main starts this script in a child process; it calls backend.admin.resolver.resolve_import_job() and prints a machine-readable result for the parent process.
-    """
-
 
     Connections: backend.main starts this script in a child process; it calls backend.admin.resolver.resolve_import_job() and prints a machine-readable result for the parent process.
     """
