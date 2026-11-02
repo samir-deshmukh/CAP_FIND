@@ -1,3 +1,5 @@
+"""Tests that historical pharmacy cutoff program labels map to supported program identities."""
+
 import csv
 from pathlib import Path
 
