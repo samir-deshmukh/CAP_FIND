@@ -90,7 +90,7 @@ def kind_from_name(name: str) -> str | None:
 # Local batch extraction, audit and ready-to-upload workflow
 # ----------------------------------------------------------------------
 def main() -> int:
-    """Extract every supported PDF in the local input folder, validate the outputs and prepare only clean CSVs for upload.
+    """Extract PDFs from the local input folder, validate the outputs and prepare only clean CSVs for upload.
 
     Connections: The operator runs this CLI on a PC; it reuses the production extractors and validators, then writes logs, reports and ready-to-upload artifacts.
     """
