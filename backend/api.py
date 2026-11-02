@@ -128,8 +128,6 @@ _PUBLIC_CACHE = _TTLCache()
 
 
 def invalidate_public_caches() -> None:
-
-
     """Clear public response and search-metadata caches after production data changes.
 
     Connections: The admin publishing/rollback workflow calls this so the next candidate API request reads updated PostgreSQL data.
@@ -147,8 +145,6 @@ _SEARCH_TTL = 60.0
 
 
 def available_public_courses(engine) -> list[str]:
-
-
     """Return the course families currently present in PostgreSQL, refreshing the short-lived cache when needed.
 
     Connections: Public search and option builders use this database-backed list instead of maintaining a hard-coded course whitelist.
@@ -223,8 +219,6 @@ def get_active_engine():
 
 
 def _db_available(engine) -> bool:
-
-
     """Check whether the configured PostgreSQL engine can execute a lightweight query.
 
     Connections: Public endpoints use this check before returning database-dependent college data.
@@ -240,8 +234,6 @@ def _db_available(engine) -> bool:
 
 
 def _require_public_course(course: str, engine=None) -> None:
-
-
     """Reject a course family that is not present in the current database dataset.
 
     Connections: Uses available_public_courses() so public API routes validate against imported data rather than a fixed list.
@@ -367,7 +359,6 @@ class SearchResponse(BaseModel):
     results: list[CollegeCard]
 
 def _search_metadata(engine, course: str, institution_codes: list[str]) -> tuple[dict[str, dict], dict[str, dict], dict[str, bool]]:
-
     """Fetch the extra college-card and drawer metadata for only the requested result-page institutions.
 
     Connections: The search handler calls this after SQL pagination so metadata work stays bounded to the visible page.
@@ -706,8 +697,6 @@ def search_colleges(
 
 
 def _search_colleges_uncached(course, percentile, city, sort, page, page_size) -> SearchResponse:
-
-
     """Run the database-backed candidate search when no valid cached response exists.
 
     Connections: Uses search_college_summary_page() for SQL aggregation/pagination, then _search_metadata() to enrich only the returned institution codes.
