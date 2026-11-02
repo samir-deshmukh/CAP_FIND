@@ -1,3 +1,5 @@
+"""Tests that SQLAlchemy connections are closed even when transaction finalization fails."""
+
 import pytest
 
 from backend.admin.db import Connection
