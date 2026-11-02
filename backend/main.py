@@ -993,7 +993,7 @@ def _run_derived_data_build(job_id: int, course_family: str | None):
 def derived_data_page(request: Request):
     """Serve the CET Data Calculator page to authorized data administrators.
 
-    Connections: Returns the page builder from backend.admin_ui and handles the page's form submission.
+    Connections: Returns the page builder from backend.admin_ui; the separate build API endpoint handles rebuild requests submitted by the page.
     """
     require(request, {'SUPER_ADMIN', 'DATA_ADMIN'})
     return derived_data()
