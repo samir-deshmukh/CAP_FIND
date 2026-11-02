@@ -103,9 +103,12 @@ def parse_filename(path: Path):
 
 
 def forward_fill_block_columns(df: pd.DataFrame) -> tuple[int, list[str]]:
-    """Forward-fill only the fields that are valid across rows within one institute/program block.
+    """Forward-fill FILL_COLUMNS in place and report columns blank at the first row.
 
-    Connections: main() applies this before validation; source fields that may genuinely be blank are intentionally left untouched.
+    Returns (fill_count, first_row_blank_cols). The latter identifies a field
+    with no earlier value to carry into the first row, so that file cannot be
+    trusted for that field. The validator and ingest path share this helper to
+    apply exactly the same block-context rule.
     """
 
     fill_count = 0
@@ -125,9 +128,12 @@ def forward_fill_block_columns(df: pd.DataFrame) -> tuple[int, list[str]]:
 
 
 def is_extraction_anomaly(row) -> bool:
-    """Identify a row that still has no institution identity after valid block context is applied.
+    """Identify broken PDF extraction rows after block context is forward-filled.
 
-    Connections: main() reports these as extraction anomalies so broken PDF output is not mistaken for a category or program issue.
+    A row is anomalous when both institution_code and institution_name remain
+    blank, or when its category cell contains a known non-category text fragment
+    from KNOWN_BAD_CATEGORY_VALUES. This distinguishes extraction damage from
+    an unfamiliar but otherwise valid data value; ingest uses the same rule.
     """
 
     cat_raw = row['category'].strip().upper()
@@ -136,9 +142,12 @@ def is_extraction_anomaly(row) -> bool:
 
 
 def is_valid_program_identity(row, known_programs: set[str]) -> bool:
-    """Check whether a program name/code pair is supported by known reference data or a trustworthy source code.
+    """Accept new CAP branches when their source program code is trustworthy.
 
-    Connections: main() uses this when evaluating new program names so valid new branches can be accepted without trusting arbitrary labels.
+    The alias CSV is a normalization/reference aid, not a closed list of every
+    branch the CET Cell may add. A clean program name paired with an official-
+    shaped code and a source PDF can be staged as a new program. Likely column
+    bleed and malformed or missing identities are rejected.
     """
 
     name = str(row.get('program_name', '')).strip()
@@ -158,9 +167,10 @@ def is_valid_program_identity(row, known_programs: set[str]) -> bool:
 
 
 def parse_category(raw: str):
-    """Normalize and classify a raw category value using the canonical category-code rules.
+    """Normalize a raw category into (base, is_ladies, section), or return Nones.
 
-    Connections: The row validator uses this with scripts.category_codes and the reference whitelist before accepting cutoff records.
+    Examples: GOPENH -> ('OPEN', False, 'HU'), LSCS -> ('SC', True, 'SL'),
+    PWDROBCH -> ('PWDROBC', False, 'HU'), and MI -> ('MI', False, 'SL').
     """
 
     if not raw or not raw.strip():
