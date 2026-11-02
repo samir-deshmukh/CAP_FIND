@@ -15,9 +15,9 @@ REQUIRED_COLUMNS=['source_pdf','page','institution_code','choice_code','allocati
 # Seat-matrix identity checks and database ingestion
 # ----------------------------------------------------------------------
 def canonical_institution_code(institution_code_raw: str, choice_code: str) -> str:
-    """Derive the five-digit institute code from the choice code and reject a conflicting supplied code.
+    """Derive the five-digit institute code from choice_code and reject a conflicting supplied code.
 
-    Connections: ingest_file() uses this check before writing a seat row so the institute and branch identifiers cannot silently disagree.
+    Connections: ingest_file() calls this before inserting a seat row so institution identity stays consistent with the official choice code.
     """
 
     from_choice=choice_code[:5]
@@ -26,9 +26,9 @@ def canonical_institution_code(institution_code_raw: str, choice_code: str) -> s
     return from_choice
 
 def ingest_file(conn,path,year,valid_cats,lane_map,alias_map):
-    """Load one validated seat-matrix CSV into PostgreSQL and record every skipped, duplicate or failed row.
+    """Validate and insert one seat-matrix CSV, preserving totals, categories, allocation lanes and source provenance.
 
-    Connections: main() calls this for each file after loading category/lane aliases; validate_seats.py supplies the filename and category rules.
+    Connections: main() calls this inside the database transaction; rejected rows go to seats_ingest_errors and each file receives a seats_ingest_log summary.
     """
 
     meta=parse_filename(path)
@@ -69,9 +69,9 @@ def ingest_file(conn,path,year,valid_cats,lane_map,alias_map):
     return read,ins,skip,dup,fail
 
 def main():
-    """Load seat-matrix CSVs for one required capture year and reconcile all row outcomes.
+    """Load validated seat-matrix CSVs and reference mappings into PostgreSQL.
 
-    Connections: This CLI bootstraps the schema, seeds allocation lanes, calls ingest_file() and fails if read rows do not equal inserted, skipped, duplicate and failed totals.
+    Connections: The CLI bootstraps the schema, upserts allocation-lane references, calls ingest_file() and reconciles read/inserted/skipped/duplicate/failed counts.
     """
 
     ap=argparse.ArgumentParser(description=__doc__); ap.add_argument('raw_dir',nargs='?',default='data/raw/seats'); ap.add_argument('--year',type=int,required=True); ap.add_argument('--db-url',default=None); args=ap.parse_args()
