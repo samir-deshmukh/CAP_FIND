@@ -13,9 +13,9 @@ SCHEMA = ROOT / 'db' / 'schema_postgres.sql'
 
 
 def engine_for(db_url: str | None = None):
-    """Get the shared SQLAlchemy engine for the requested database URL.
+    """Create a SQLAlchemy engine for the requested PostgreSQL URL or configured default.
 
-    Connections: The ingestion CLIs call this so all scripts use the same connection and pooling configuration as the backend.
+    Connections: CLI ingestion scripts call this so they share the same database connection configuration as the application.
     """
 
     return get_engine(db_url)
