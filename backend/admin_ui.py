@@ -1269,9 +1269,11 @@ def live_processing(job_id: int) -> str:
 
 
 def resolver_page(rows) -> str:
-    """Build the college website resolver from the supplied college rows.
+    """Build the college website resolver page and its browser-side controls.
 
-    Renders the initial table on the server, then uses resolver APIs for searching, editing and verification.
+    The current FastAPI route passes an empty row list; the browser loads the
+    current resolver records from the API. Callers may also supply initial rows,
+    which are escaped and rendered into the page before the browser refreshes.
     """
     data =json.dumps(rows,ensure_ascii=False,default=str).replace('</','<\\/')
     server_rows = []
