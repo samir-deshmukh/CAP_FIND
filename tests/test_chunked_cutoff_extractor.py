@@ -1,3 +1,5 @@
+"""Tests for PDF chunk splitting, page-number remapping and the backend chunk-size limit."""
+
 import csv
 import json
 from pathlib import Path
