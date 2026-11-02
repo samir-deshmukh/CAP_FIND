@@ -13,6 +13,11 @@ SCHEMA = ROOT / 'db' / 'schema_postgres.sql'
 
 
 def engine_for(db_url: str | None = None):
+    """Get the shared SQLAlchemy engine for the requested database URL.
+
+    Connections: The ingestion CLIs call this so all scripts use the same connection and pooling configuration as the backend.
+    """
+
     return get_engine(db_url)
 
 
