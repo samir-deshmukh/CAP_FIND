@@ -642,6 +642,10 @@ async def enqueue_job(
     expected_sha256: str = Form(...),
     expected_size: int = Form(...),
 ):
+    """Receive one source PDF and create its private local extraction job.
+
+    Connections: The Import Center posts the file here after the backend creates a job-scoped upload token; the worker later returns its CSV artifact to the backend.
+    """
     _origin_ok(request)
     backend_url = _backend_ok(backend_url)
     if not re.fullmatch(r"[a-fA-F0-9]{64}", expected_sha256):
