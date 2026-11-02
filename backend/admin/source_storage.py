@@ -18,6 +18,8 @@ LOCAL_IMPORTS = BASE / "data" / "imports"
 
 
 class StorageNotConfigured(RuntimeError):
+    """Signal that the selected private source-storage backend is not configured safely."""
+
     pass
 
 
