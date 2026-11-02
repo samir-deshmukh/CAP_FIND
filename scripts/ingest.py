@@ -15,9 +15,9 @@ from category_codes import is_category_code  # noqa: E402
 # Program mapping and cutoff-row ingestion
 # ----------------------------------------------------------------------
 def load_program_levels(ref_dir: Path):
-    """Load raw program-name to program-level mappings from the reference CSV.
+    """Load the raw program-name to academic-level mapping from the reference CSV.
 
-    Connections: ingest_file() uses this map when creating or finding a normalized program row.
+    Connections: main() passes this map into ingest_file() so each program row gets its configured level.
     """
 
     df=pd.read_csv(ref_dir/'program_aliases.csv',dtype=str,keep_default_na=False)
@@ -25,9 +25,9 @@ def load_program_levels(ref_dir: Path):
 
 
 def get_or_create_program(conn, cache, family, name_raw, level_map):
-    """Find a program row by course family and raw name, creating it when absent.
+    """Find or insert one program record and cache its database ID for reuse.
 
-    Connections: ingest_file() calls this for each valid cutoff row and caches IDs to avoid repeated database lookups.
+    Connections: ingest_file() calls this for each cutoff row; the returned program_id is used by the cutoffs foreign key.
     """
 
     key=(family,name_raw)
@@ -43,9 +43,9 @@ def get_or_create_program(conn, cache, family, name_raw, level_map):
 
 
 def ingest_file(conn,path,program_cache,level_map):
-    """Validate and load one cutoff CSV into PostgreSQL while preserving raw rows and rejected-row reasons.
+    """Validate and insert one cutoff CSV into staging, canonical lookup tables and cutoff facts.
 
-    Connections: main() calls this inside a database transaction; it relies on validate_data.py for filename, category, stage, section and extraction checks.
+    Connections: main() calls this inside a transaction; malformed rows are recorded in ingest_errors and every source file gets an ingest_log summary.
     """
 
     meta=parse_filename(path)
@@ -98,9 +98,9 @@ def ingest_file(conn,path,program_cache,level_map):
 
 
 def main():
-    """Ingest every cutoff CSV in a folder and report row totals by outcome.
+    """Load every cutoff CSV in a folder and ingest the rows into PostgreSQL.
 
-    Connections: This CLI bootstraps the schema, loads program aliases, calls ingest_file() for each file and aborts if the row-accounting totals do not reconcile.
+    Connections: The CLI bootstraps the schema, loads program aliases, calls ingest_file() for each file and checks the final row-count reconciliation.
     """
 
     ap=argparse.ArgumentParser(description=__doc__); ap.add_argument('raw_dir',nargs='?',default='data/raw'); ap.add_argument('--db-url',default=None); ap.add_argument('--ref-dir',default='data/reference'); args=ap.parse_args()
