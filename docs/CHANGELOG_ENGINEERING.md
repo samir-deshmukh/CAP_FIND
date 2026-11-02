@@ -2,13 +2,14 @@
 
 ## 2026-11-02
 
-### Improve admin UI code readability without changing behavior
-- **Source commits:** `7bebb6b2442456455e0ef6591aa4a685a274b24f`, `878468a236cf7d713a959be766c06b2a1a85ff5b`
-- **Scope:** Normalize Python-level spacing in `backend/admin_ui.py`; document all 13 top-level helpers/page builders; add concise explanations for shared browser session handling, API helpers, import/upload controls, dashboard refresh, derived-data actions and resolver workflows.
-- **Purpose:** Make the admin interface easier to trace from page builder to shared browser helpers and backend admin endpoints.
-- **Validation:** GitHub Code Quality and Secret Scan workflows passed for the latest source commit. No local Python runtime/test suite was run in this session.
-- **Production impact:** None. Changes are on `docs/admin-ui-formatting` in draft PR #2; `main` and production were not changed.
-- **Limitation:** Embedded HTML/CSS/JavaScript remains largely inline in the Python module. This pass documents the major flows but does not restructure or split the templates.
+### Document CETFind application and test code
+- **Branch / PR:** `docs/admin-ui-formatting` / [Draft PR #2](https://github.com/samir-deshmukh/CAP_FIND/pull/2)
+- **Scope:** Add concise module, class and function documentation across the FastAPI application, admin services, public API/query layer, local and remote workers, PDF and seat-matrix extraction, validation, ingestion, resolver and derived-data scripts. Add purpose descriptions to test modules and section comments around multi-stage workflows.
+- **Connections documented:** Explain how frontend pages call API routes, how routes delegate to admin services/workers, how extractors feed validators and staging, how PostgreSQL stores job and public data, and how review/approval/publishing uses those records.
+- **Formatting:** Normalize selected Python spacing and expand a few one-line helper definitions for readable docstrings. Embedded frontend templates were not intentionally redesigned.
+- **Validation:** Latest GitHub Actions run: Code Quality **passed**, including formatting, linting, tests and coverage gate; Secret Scan **passed**. An earlier test-collection issue caused by module-comment placement was corrected before the passing run.
+- **Production impact:** None. Changes remain on the draft PR branch; `main`, production deployment and production data were not changed.
+- **Review note:** The PR is intentionally still a draft. Review the full diff before merging; this work is intended to improve code navigation and explanation, not change application behavior.
 
 This log records verified changes made during the CETFind engineering rebuild. Keep entries short and auditable; link each entry to its exact commit. A commit records a source change, not production deployment or release approval.
 
