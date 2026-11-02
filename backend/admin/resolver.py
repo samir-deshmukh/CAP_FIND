@@ -403,9 +403,11 @@ def _city_key(value):
 
 
 def infer_city_from_name(institution_name, known_cities):
-    """Infer a city only when a known city appears as a complete phrase in the institution name.
+    """Infer a city only when its complete name appears in the institution name.
 
-    Connections: Resolver seeding uses the known-city list to fill missing city values without guessing from partial substrings.
+    Matching is longest-first so a shorter city is not selected from inside a
+    longer place name. If equally long matches are ambiguous, return None.
+    This is a deterministic fallback, not a substitute for source verification.
     """
 
     name = " " + _city_key(institution_name) + " "
@@ -1078,7 +1080,9 @@ GITHUB_MAPPING_URL='https://raw.githubusercontent.com/github/india/main/Students
 def sync_github_india(conn):
     """Import candidate college website mappings from the configured GitHub India reference source.
 
-    Connections: The protected resolver seed endpoint calls this; imported URLs remain candidates and still require verification.
+    Imported URLs are stored as CANDIDATE records, not trusted as verified
+    college websites. The current HTTP github-seed endpoint is disabled; this
+    helper remains a separate integration function.
     """
 
     req=urllib.request.Request(GITHUB_MAPPING_URL,headers={'User-Agent':'CET-CAP-Website-Resolver/1.0'})
@@ -1096,9 +1100,11 @@ def sync_github_india(conn):
     return n
 
 def gemini_find(college_name,city=None,excluded_url=None,institution_code=None):
-    """Search for a likely official website for one college using the configured Gemini integration.
+    """Research a likely official website and campus location for one college.
 
-    Connections: The resolver's automatic/manual lookup routes use this to create a candidate; verify_url() and grounded checks decide whether it can be trusted.
+    Connections: Automatic/manual resolver workers use Gemini with Google
+    Search grounding to create a candidate; URL checks and cited evidence must
+    still pass before the website or location is treated as verified.
     """
 
     key=os.getenv('GEMINI_API_KEY','').strip()
