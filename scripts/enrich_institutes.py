@@ -21,9 +21,9 @@ NAME_SIMILARITY_THRESHOLD=0.30
 # Institute contact validation and safe database enrichment
 # ----------------------------------------------------------------------
 def validate_website(value):
-    """Normalize an institute website URL and reject unsupported or unsafe values.
+    """Normalize an institute website URL and reject malformed, unsafe or placeholder values.
 
-    Connections: load_and_reconcile() applies this before any candidate URL can be written into the institutes table.
+    Connections: load_and_reconcile() uses this before any external website value can enter the institute enrichment candidate set.
     """
 
     if not value:return None
@@ -37,15 +37,15 @@ def validate_website(value):
     return urlunsplit((p.scheme.lower(),p.netloc,p.path or '/',p.query,p.fragment))
 
 def norm(s):return re.sub(r'\s+',' ',re.sub(r'[^A-Z0-9 ]',' ',str(s).upper())).strip()
-    """Normalize a college name for a case- and punctuation-insensitive comparison.
+    """Normalize an institute name for comparison by uppercasing and removing punctuation/extra spaces.
 
-    Connections: load_and_reconcile() uses this only to compare the reference CSV name with the database name; it does not change the stored official name.
+    Connections: load_and_reconcile() uses this to compare the supplied reference name with the authoritative institute name.
     """
 
 def load_and_reconcile(csv_path, conn):
-    """Match institute-contact CSV rows to existing institute codes and quarantine conflicts or weak name matches.
+    """Match enrichment CSV rows to known institute codes and quarantine conflicts or weak name matches.
 
-    Connections: main() calls this before updating city and website fields; only rows that match an existing institute code and pass reconciliation are returned as clean.
+    Connections: main() calls this before applying accepted city, website and address updates to the PostgreSQL institute registry.
     """
 
     raw=pd.read_csv(csv_path,dtype=str,keep_default_na=False); raw.columns=[c.strip().lower() for c in raw.columns]
@@ -76,9 +76,9 @@ def load_and_reconcile(csv_path, conn):
     return in_db[['institution_code','city','website']],pd.DataFrame(quarantined)
 
 def main():
-    """Apply verified city and website enrichment from the institute-contact reference CSV.
+    """Apply reviewed institute metadata from an external CSV to matching PostgreSQL institute records.
 
-    Connections: This CLI updates the institutes table in one transaction, records the source and verification timestamp, and prints coverage plus quarantined rows.
+    Connections: The CLI validates URLs and institute identity, reports quarantined rows, then updates only records that pass reconciliation.
     """
 
     ap=argparse.ArgumentParser(); ap.add_argument('csv_path',nargs='?',default='data/reference/institute_contacts.csv'); ap.add_argument('--db-url',default=None); args=ap.parse_args()
