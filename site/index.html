@@ -2834,7 +2834,7 @@ function bindEls() {
      Category/Quota controls never wait for this larger raw-row payload. ── */
   const collegeYearCache = new Map();
   // Fetch and cache one college's raw cutoff rows for the selected year from the public API.
-async function loadCollegeYear(course, college, year) {
+  async function loadCollegeYear(course, college, year) {
     const key = `${course}:${year}:${college}`;
     if (collegeYearCache.has(key)) return collegeYearCache.get(key);
     const response = await fetch(
@@ -2853,7 +2853,7 @@ async function loadCollegeYear(course, college, year) {
      the backend for the selected college. Powers the Seat Matrix view. */
   const seatDataCache = window.__seatDataCache || (window.__seatDataCache = new Map());
   // Fetch and cache the selected college's source-ordered seat matrix and official PDF metadata.
-async function loadSeats(course, college) {
+  async function loadSeats(course, college) {
     const key = `${course}:${college}`;
     if (seatDataCache.has(key)) return seatDataCache.get(key);
     const response = await fetch(
@@ -3131,7 +3131,7 @@ function escapeHtml(value) {
      remain college-specific and contain every category/section/stage
      present in the database for the selected year. */
   // Render the complete cutoff data available for the selected college and year.
-async function renderDrawerAllData() {
+  async function renderDrawerAllData() {
     const meta = drawerMeta();
     if (!meta || !state.college) { showEmpty(); return; }
     const years = Array.isArray(meta.y)
@@ -3470,7 +3470,7 @@ function seatMatrixChoiceHtml(course, code, allocs, collegeName, choiceCount, me
   }
 
   // Fetch the selected college's seat data and render its source metadata and allocation rows.
-async function renderSeatMatrix() {
+  async function renderSeatMatrix() {
     els.seatMatrixBody.innerHTML = `<p class="d-text">Loading seat matrix…</p>`;
     if (!state.course || !state.college) {
       els.seatMatrixBody.innerHTML = `<p class="d-text">Seat matrix isn't available until a course and college are loaded.</p>`;
@@ -3685,7 +3685,7 @@ function init() {
      cutoff data is loaded lazily one college+year API request at a time. Category and
      quota are highlights, not filters of the displayed PDF-style data. ── */
   // Restrict this controller to the college and course opened in Slide 2.
-async function lockToCollege(course, collegeCode) {
+  async function lockToCollege(course, collegeCode) {
     state.course = course;
     state.branch = null;
     state.college = collegeCode;
