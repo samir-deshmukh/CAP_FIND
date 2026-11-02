@@ -1,5 +1,15 @@
 # Engineering Change Log
 
+## 2026-11-02
+
+### Improve admin UI code readability without changing behavior
+- **Source commits:** `7bebb6b2442456455e0ef6591aa4a685a274b24f`, `878468a236cf7d713a959be766c06b2a1a85ff5b`
+- **Scope:** Normalize Python-level spacing in `backend/admin_ui.py`; document all 13 top-level helpers/page builders; add concise explanations for shared browser session handling, API helpers, import/upload controls, dashboard refresh, derived-data actions and resolver workflows.
+- **Purpose:** Make the admin interface easier to trace from page builder to shared browser helpers and backend admin endpoints.
+- **Validation:** GitHub Code Quality and Secret Scan workflows passed for the latest source commit. No local Python runtime/test suite was run in this session.
+- **Production impact:** None. Changes are on `docs/admin-ui-formatting` in draft PR #2; `main` and production were not changed.
+- **Limitation:** Embedded HTML/CSS/JavaScript remains largely inline in the Python module. This pass documents the major flows but does not restructure or split the templates.
+
 This log records verified changes made during the CETFind engineering rebuild. Keep entries short and auditable; link each entry to its exact commit. A commit records a source change, not production deployment or release approval.
 
 ## 2026-10-20
