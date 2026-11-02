@@ -2286,7 +2286,10 @@ def _resolver_server_busy():
 def _resolve_one_import_background(job_id: int):
     """Run one automatic website-resolution step in a short-lived child process.
 
-    Connections: This keeps resolver memory outside the FastAPI web process.
+    The web service has a small memory budget. Isolating Gemini/Google Search
+    response handling in a child process prevents its temporary allocations
+    from accumulating in the long-lived FastAPI process; the resolver worker
+    also uses a PostgreSQL advisory lock to prevent concurrent child runs.
     """
 
     try:
@@ -3342,9 +3345,10 @@ def resolver_seed(request: Request):
 
 @app.post('/admin/api/resolver/github-seed')
 def resolver_github_seed(request: Request):
-    """Synchronize resolver candidates from the configured GitHub India source.
+    """Reject the retired GitHub India resolver-seeding endpoint.
 
-    Connections: Delegates to the resolver integration after checking the caller's admin role and request protection.
+    Connections: The route keeps the old URL explicit but returns HTTP 410; the
+    active resolver scope is the CAP institutes table, seeded by resolver_seed().
     """
     require(request, {'SUPER_ADMIN','DATA_ADMIN'}, csrf=True)
     raise HTTPException(410, 'GitHub seed is disabled; resolver scope is the CAP institutes table')
