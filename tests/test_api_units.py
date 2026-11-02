@@ -1,5 +1,3 @@
-"""Tests public API validation, rate limiting, cache behavior and response shaping without a live database."""
-
 """Tests public API validation, rate limiting, cache behavior and response shaping without requiring a live database."""
 
 from types import SimpleNamespace
