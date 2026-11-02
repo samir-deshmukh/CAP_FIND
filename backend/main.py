@@ -1518,10 +1518,9 @@ def _local_worker_fail(job_id: int, message: str):
 
 
 def _reserve_local_artifact_worker(connection, job_id: int) -> None:
-    """Reserve the database worker lease before accepting an extracted CSV artifact.
+    """Reserve the database lease before returning the artifact upload response.
 
-    Connections: Prevents another worker from claiming the same import while server-side validation and staging begin.
-
+    Connections: Prevents another worker from claiming this job while server-side validation and staging begin.
     """
 
     connection.execute(
@@ -1537,10 +1536,9 @@ def _reserve_local_artifact_worker(connection, job_id: int) -> None:
 def _process_local_import_background(job_id: int, artifact_path: str,
                                      data_type: str, family: str, year: int,
                                      round_name: str | None, summary: dict):
-    """Validate and stage an artifact returned by the local extraction worker.
+    """Validate and stage a CSV returned by the local extraction worker.
 
-    Connections: Reuses the existing import pipeline and writes job progress/events for the admin interface.
-
+    Connections: Reuses the import pipeline and records progress/events for the admin interface.
     """
 
     worker_id = _WORKER_ID
@@ -2115,10 +2113,9 @@ def _csv_header(path: Path):
         except StopIteration: return set()
 
 def _process_csv_import_background(job_id: int):
-    """Validate and stage a canonical CSV through the same durable import workflow.
+    """Validate and stage a canonical CSV through the durable import pipeline.
 
-    Connections: The queue worker calls this for CSV jobs so they do not enter the PDF parser.
-
+    Connections: The queue worker calls this for CSV jobs so they bypass the PDF parser.
     """
 
     with _IMPORT_PROCESS_LOCK:
@@ -2257,10 +2254,9 @@ def upload_csv(request: Request, background_tasks: BackgroundTasks, file: Upload
         raise
 
 def _resolver_server_busy():
-    """Check whether the server is already occupied by memory-heavy import processing.
+    """Check whether a memory-heavy import is already using the web instance.
 
-    Connections: The resolver uses this guard to avoid competing with the serialized import worker on the small web instance.
-
+    Connections: Resolver work uses this guard to avoid competing with the serialized import worker.
     """
 
     with connect() as c:
@@ -2284,10 +2280,9 @@ def _resolver_server_busy():
 
 
 def _resolve_one_import_background(job_id: int):
-    """Run one automatic college-website lookup in a short-lived child process.
+    """Run one automatic website-resolution step in a short-lived child process.
 
-    Connections: Keeps resolver memory use separate from the FastAPI web process and returns the result to the resolver workflow.
-
+    Connections: This keeps resolver memory outside the FastAPI web process.
     """
 
     try:
@@ -2335,10 +2330,9 @@ def _resolve_one_import_background(job_id: int):
 
 
 def _resolve_one_manual_resolver_step(status_filter, exclude_codes, institution_code):
-    """Run one manually requested website lookup in a short-lived child process.
+    """Run one manual resolver lookup in a short-lived child process.
 
-    Connections: The resolver UI uses this bounded step for an individual college rather than loading the full resolver workload into the web process.
-
+    Connections: The resolver route uses this bounded helper for an administrator-selected college.
     """
 
     env = os.environ.copy()
@@ -2373,8 +2367,7 @@ def _resolve_one_manual_resolver_step(status_filter, exclude_codes, institution_
 def _process_import_background(job_id: int):
     """Start one import in the background while respecting the global processing lock.
 
-    Connections: Called by queue/retry paths so memory-heavy PDF processing does not overlap.
-
+    Connections: Queue and retry paths use this helper to avoid overlapping memory-heavy extraction jobs.
     """
 
     with _IMPORT_PROCESS_LOCK:
@@ -2382,10 +2375,9 @@ def _process_import_background(job_id: int):
 
 
 def _process_import_background_locked(job_id: int):
-    """Run extraction, normalization, validation and staging while the import lock is held.
+    """Run the import pipeline while the global processing lock is held.
 
-    Connections: Uses the admin processing pipeline and updates PostgreSQL job state/events; production publishing remains a separate approval step.
-
+    Connections: Coordinates extraction, normalization, validation and staging; publication still requires explicit approval.
     """
 
     with connect() as connection:
