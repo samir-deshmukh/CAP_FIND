@@ -14,6 +14,11 @@ BACKUP_ROOT = BASE / 'data' / 'publish_backups'
 
 
 def _run(cmd: list[str], cwd: Path = BASE, timeout: int = 1800):
+    """Run a publishing subprocess with a timeout and return its combined output.
+
+    Connections: Build helpers use this wrapper for external commands so failures include useful output.
+    """
+
     p = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=timeout)
     out = (p.stdout or '') + (p.stderr or '')
     if p.returncode != 0:
@@ -22,6 +27,11 @@ def _run(cmd: list[str], cwd: Path = BASE, timeout: int = 1800):
 
 
 def _copy_site_skeleton(dst: Path):
+    """Copy the candidate-facing site into a fresh build directory without private runtime data.
+
+    Connections: build_runtime() uses this as the starting point for a release; the public frontend fetches candidate data through the API.
+    """
+
     if dst.exists(): shutil.rmtree(dst)
     # The candidate site is now API-backed. Do not copy or create any runtime
     # cutoff/seat data directory in the public tree.
@@ -29,6 +39,11 @@ def _copy_site_skeleton(dst: Path):
 
 
 def build_runtime(release_id: int) -> tuple[Path, dict]:
+    """Build the static public-site artifact and a manifest for one release.
+
+    Connections: publish_release() calls this before verification; the build intentionally excludes cutoff and seat master datasets.
+    """
+
     build_dir = PUBLISH_ROOT / f'release_{release_id}_{int(time.time())}'
     public_dir = build_dir / 'site'
     build_dir.mkdir(parents=True, exist_ok=True)
@@ -47,6 +62,11 @@ def build_runtime(release_id: int) -> tuple[Path, dict]:
 
 
 def verify_public_tree(public_dir: Path) -> dict:
+    """Check a built or published site for invalid JSON and forbidden private files or key material.
+
+    Connections: publish_release() runs this before and after the atomic site replacement.
+    """
+
     errors = []
     data = public_dir / 'data'
     # The API-backed public tree intentionally contains no runtime data directory.
@@ -66,6 +86,11 @@ def verify_public_tree(public_dir: Path) -> dict:
 
 
 def atomic_publish(public_dir: Path, release_id: int):
+    """Replace the live site directory with a verified build while keeping a recoverable backup.
+
+    Connections: publish_release() calls this only after the build passes verification; the returned backup path is stored with the release.
+    """
+
     BACKUP_ROOT.mkdir(parents=True, exist_ok=True)
     backup = BACKUP_ROOT / f'release_{release_id}_{int(time.time())}'
     # Keep a recoverable copy of the currently published site before replacement.
@@ -86,6 +111,11 @@ def atomic_publish(public_dir: Path, release_id: int):
 
 
 def publish_release(job_id: int, release_id: int):
+    """Build, verify and atomically publish the public site for one approved release.
+
+    Connections: backend.main.publish() calls this after authorization; it updates PostgreSQL release/job state and records an audit event.
+    """
+
     # Claim publication in a short transaction. The conditional update makes
     # duplicate clicks/retries mutually exclusive before any filesystem work.
     with connect() as conn:
