@@ -1,3 +1,5 @@
+"""Tests for cutoff PDF metadata recovery, wrapped program headings and stage interpretation."""
+
 from scripts.cutoff_extractor import (
     extract_metadata,
     merge_split_rank_lines,
