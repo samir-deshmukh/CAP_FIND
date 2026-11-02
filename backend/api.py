@@ -77,7 +77,8 @@ class _TTLCache:
         Connections: Public endpoint handlers share this cache so repeated queries can reuse recent database results.
 
         """
-self._max = max_items
+
+        self._max = max_items
         self._data: dict = {}
         self._locks: dict = {}
         self._guard = threading.Lock()
@@ -90,7 +91,8 @@ self._max = max_items
         Connections: Endpoint handlers provide the database-backed builder; the per-key lock prevents concurrent cache misses from stampeding PostgreSQL.
 
         """
-now = time.monotonic()
+
+        now = time.monotonic()
         hit = self._data.get(key)
         if hit and now - hit[0] < ttl:
             return hit[1]
@@ -124,7 +126,8 @@ now = time.monotonic()
         Connections: The cache invalidation helper calls this after data publication or rollback.
 
         """
-with self._guard:
+
+        with self._guard:
             self._data.clear()
 
 
@@ -142,7 +145,9 @@ def invalidate_public_caches() -> None:
 
 
     """
-global PUBLIC_COURSES, _PUBLIC_COURSES_AT
+
+
+    global PUBLIC_COURSES, _PUBLIC_COURSES_AT
     _PUBLIC_CACHE.clear()
     _SEARCH_METADATA_CACHE.clear()
     PUBLIC_COURSES = None
@@ -163,7 +168,9 @@ def available_public_courses(engine) -> list[str]:
 
 
     """
-global PUBLIC_COURSES, _PUBLIC_COURSES_AT
+
+
+    global PUBLIC_COURSES, _PUBLIC_COURSES_AT
     now = time.monotonic()
     if PUBLIC_COURSES is not None and now - _PUBLIC_COURSES_AT < _PUBLIC_COURSES_TTL:
         return list(PUBLIC_COURSES)
@@ -190,7 +197,9 @@ def check_rate_limit(request: Request):
 
 
     """
-ip = client_ip(request)
+
+
+    ip = client_ip(request)
     now = time.monotonic()
     cutoff = now - RATE_LIMIT_WINDOW_SECONDS
 
@@ -233,7 +242,9 @@ def get_active_engine():
 
 
     """
-global _engine_cache
+
+
+    global _engine_cache
     if _engine_cache is None:
         _engine_cache = get_engine()
     return _engine_cache
@@ -250,7 +261,9 @@ def _db_available(engine) -> bool:
 
 
     """
-try:
+
+
+    try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return True
@@ -269,7 +282,9 @@ def _require_public_course(course: str, engine=None) -> None:
 
 
     """
-if engine is None:
+
+
+    if engine is None:
         engine = get_active_engine()
     if course not in available_public_courses(engine):
         raise HTTPException(status_code=400, detail="Course is not available in the current database dataset.")
@@ -281,7 +296,7 @@ def public_options(request: Request, response: Response):
 
     Connections: The frontend calls GET /api/options; the cached builder reads the available values from PostgreSQL.
     """
-check_rate_limit(request)
+    check_rate_limit(request)
     response.headers["Cache-Control"] = "public, max-age=60"
     return _PUBLIC_CACHE.get_or_set("options", _OPTIONS_TTL, _build_public_options)
 
@@ -297,7 +312,9 @@ def _build_public_options():
 
 
     """
-try:
+
+
+    try:
         engine = get_active_engine()
     except Exception:
         raise HTTPException(status_code=503, detail="Public PostgreSQL data service is unavailable.")
@@ -329,7 +346,7 @@ def public_stats(request: Request, response: Response):
 
     Connections: The frontend calls GET /api/stats; the cached builder reads counts from PostgreSQL.
     """
-check_rate_limit(request)
+    check_rate_limit(request)
     response.headers["Cache-Control"] = "public, max-age=60"
     return _PUBLIC_CACHE.get_or_set("stats", _STATS_TTL, _build_public_stats)
 
@@ -345,7 +362,9 @@ def _build_public_stats():
 
 
     """
-try:
+
+
+    try:
         engine = get_active_engine()
         with engine.connect() as conn:
             row = conn.execute(text("""
@@ -408,7 +427,9 @@ def _search_metadata(engine, course: str, institution_codes: list[str]) -> tuple
 
 
     """
-if not institution_codes:
+
+
+    if not institution_codes:
         return {}, {}, {}
 
     now = time.monotonic()
@@ -520,7 +541,7 @@ def college_trend_options(
 
     Connections: The college-details frontend calls this endpoint; it reads the precomputed cutoff_filter_options table in PostgreSQL.
     """
-check_rate_limit(request)
+    check_rate_limit(request)
     engine = get_active_engine()
     _require_public_course(course, engine)
     with engine.connect() as conn:
@@ -557,7 +578,7 @@ def college_trend(
 
     Connections: The frontend supplies the college, course and optional category/quota filters; PostgreSQL provides the precomputed cutoff_trend_points.
     """
-check_rate_limit(request)
+    check_rate_limit(request)
     engine = get_active_engine()
     _require_public_course(course, engine)
     if not _db_available(engine):
@@ -614,7 +635,7 @@ def get_college_seats(
 
     Connections: The college details UI calls this endpoint; PostgreSQL is the source, with a legacy runtime-table fallback for older imports.
     """
-check_rate_limit(request)
+    check_rate_limit(request)
     engine = get_active_engine()
     _require_public_course(course, engine)
     with engine.connect() as conn:
@@ -730,7 +751,7 @@ def search_colleges(
 
     Connections: The frontend sends course, percentile, optional city and page settings; the uncached helper queries PostgreSQL and returns one page of CollegeCard results.
     """
-check_rate_limit(request)
+    check_rate_limit(request)
     key = ("search", course, percentile, (city or "").strip().lower(), sort, page, page_size)
     return _PUBLIC_CACHE.get_or_set(
         key, _SEARCH_TTL,
@@ -749,7 +770,9 @@ def _search_colleges_uncached(course, percentile, city, sort, page, page_size) -
 
 
     """
-try:
+
+
+    try:
         engine = get_active_engine()
     except Exception:
         raise HTTPException(status_code=503, detail="Public PostgreSQL data service is unavailable.")
@@ -836,7 +859,7 @@ def get_college_details(
 
     Connections: The college drawer calls this endpoint; it queries PostgreSQL rows scoped to the requested institution rather than sending the full dataset.
     """
-check_rate_limit(request)
+    check_rate_limit(request)
     engine = get_active_engine()
     if not _db_available(engine):
         raise HTTPException(status_code=503, detail="Public PostgreSQL data service is unavailable.")
