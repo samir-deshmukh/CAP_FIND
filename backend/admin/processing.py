@@ -814,9 +814,12 @@ def _require_clean_stage(conn, job_id: int, result_type: str):
 
 
 def revalidate_legacy_mh_staging(conn, job_id: int, actor_user_id: int):
-    """Recheck the narrowly identified legacy BCA 2026 CAP-2 MH staging mismatch.
+    """Repair only the known 2026 BCA CAP-2 MH validation mismatch in staged rows.
 
-    Connections: The protected review endpoint calls this compatibility repair; it does not bypass the normal approval gate.
+    The helper requires the exact legacy filename, BCA course family, 2026
+    year, CAP-2 round, CUTOFFS data type and expected REVIEW_REQUIRED validator
+    result. It revalidates existing staged rows only; it does not commit
+    production data or bypass the normal approval gate.
     """
 
     import re
