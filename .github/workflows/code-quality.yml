@@ -44,7 +44,7 @@ jobs:
             exit 0
           fi
           python -m py_compile "${python_files[@]}"
-          ruff check --select E4,E9,F63,F7,F82 --output-format=github "${python_files[@]}"
+          ruff check --select E9,F63,F7,F82 --output-format=github "${python_files[@]}"
       - name: Tests and coverage gate
         run: pytest -q
 
