@@ -1,3 +1,10 @@
+"""Preflight checks and source-metadata detection for CAP imports.
+
+The upload routes in backend.main call run_preflight() before queueing work.
+The processing pipeline then uses the detected data type and course family
+to select the correct cutoff or seat-matrix extractor.
+"""
+
 import hashlib
 import re
 import shutil
@@ -300,6 +307,10 @@ MAX_PDF_BYTES = 50 * 1024 * 1024
 
 
 def sha256_file(path):
+    """Calculate a streaming SHA-256 fingerprint for a source file.
+
+    Connections: security_check() stores this fingerprint with the import job so retries can verify the same source.
+    """
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
@@ -308,6 +319,10 @@ def sha256_file(path):
 
 
 def security_check(path):
+    """Validate the PDF extension, size limit and file signature, then fingerprint it.
+
+    Connections: run_preflight() calls this before recording metadata or queueing extraction.
+    """
     pdf_path = Path(path)
     size = pdf_path.stat().st_size
 
@@ -324,6 +339,10 @@ def security_check(path):
 
 
 def run_preflight(connection, job_id, path, original_filename=None):
+    """Run the upload security checks and identify the source PDF's import metadata.
+
+    Connections: backend.main upload routes call this with the admin DB connection; it records job state/events for the Import Center.
+    """
     try:
         update_status(
             connection,
