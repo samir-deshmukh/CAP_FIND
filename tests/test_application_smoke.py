@@ -1,6 +1,6 @@
-"""Smoke tests that verify the FastAPI application and public API can be imported and expose the expected application configuration."""
-
 from __future__ import annotations
+
+# Smoke tests for FastAPI application startup and public API import configuration.
 
 import importlib
 
