@@ -1527,9 +1527,7 @@ def _reserve_local_artifact_worker(connection, job_id: int) -> None:
     Connections: Prevents another worker from claiming the same import while server-side validation and staging begin.
 
 
-    """
-    """Make CSV staging visible and protected before returning the upload response."""
-    connection.execute(
+    """connection.execute(
         "UPDATE import_jobs SET worker_id=?,worker_lease_until=CURRENT_TIMESTAMP + INTERVAL '2 minutes',updated_at=CURRENT_TIMESTAMP WHERE id=?",
         (_WORKER_ID, job_id),
     )
@@ -1551,9 +1549,7 @@ def _process_local_import_background(job_id: int, artifact_path: str,
     Connections: Reuses the existing import pipeline and writes job progress/events for the admin interface.
 
 
-    """
-    """Validate/stage a locally extracted artifact using the existing pipeline."""
-    worker_id = _WORKER_ID
+    """worker_id = _WORKER_ID
     heartbeat_stop = threading.Event()
     heartbeat_thread = None
     try:
@@ -2131,9 +2127,7 @@ def _process_csv_import_background(job_id: int):
 
     Connections: The queue worker calls this for CSV jobs so they do not enter the PDF parser.
 
-    """
-    """Stage a locally pre-extracted canonical CSV through existing validation."""
-    with _IMPORT_PROCESS_LOCK:
+    """with _IMPORT_PROCESS_LOCK:
         with connect() as connection:
             job = connection.execute('SELECT * FROM import_jobs WHERE id=?', (job_id,)).fetchone()
             if not job or job['status'] not in {'QUEUED','EXTRACTING','FAILED','CANCELLED','REVIEW_REQUIRED'}: return
@@ -2275,9 +2269,7 @@ def _resolver_server_busy():
 
     Connections: The resolver uses this guard to avoid competing with the serialized import worker on the small web instance.
 
-    """
-    """Keep AI resolver work out of the critical path on the small web instance."""
-    with connect() as c:
+    """with connect() as c:
         active = c.execute(
             "SELECT COUNT(*) AS n FROM import_jobs WHERE status IN ('RECEIVED','IDENTIFIED','EXTRACTING','NORMALIZING','VALIDATING','COMPARING')"
         ).fetchone()['n']
@@ -2307,16 +2299,7 @@ def _resolve_one_import_background(job_id: int):
     Connections: Keeps resolver memory use separate from the FastAPI web process and returns the result to the resolver workflow.
 
 
-    """
-    """Run exactly one resolver step in a short-lived child process.
-
-    The web service is intentionally small (512 MB on the current Render
-    instance). Gemini's Google-search response handling is isolated from the
-    long-lived FastAPI process so temporary allocations are returned to the OS
-    when the resolver step exits. The worker itself takes a PostgreSQL advisory
-    lock, preventing concurrent resolver children from multiplying memory use.
-    """
-    try:
+    """try:
         busy, reason = _resolver_server_busy()
         if busy:
             log.info('Website resolver deferred after import %s: %s', job_id, reason)
@@ -2370,9 +2353,7 @@ def _resolve_one_manual_resolver_step(status_filter, exclude_codes, institution_
     Connections: The resolver UI uses this bounded step for an individual college rather than loading the full resolver workload into the web process.
 
 
-    """
-    """Run one admin resolver step in a short-lived process to bound web RAM."""
-    env = os.environ.copy()
+    """env = os.environ.copy()
     env.setdefault('PYTHONIOENCODING', 'utf-8')
     env.setdefault('PYTHONUTF8', '1')
     env.setdefault('OMP_THREAD_LIMIT', '1')
@@ -2411,9 +2392,7 @@ def _process_import_background(job_id: int):
     Connections: Called by queue/retry paths so memory-heavy PDF processing does not overlap.
 
 
-    """
-    """Run one memory-heavy import at a time on the web instance."""
-    with _IMPORT_PROCESS_LOCK:
+    """with _IMPORT_PROCESS_LOCK:
         _process_import_background_locked(job_id)
 
 
@@ -2427,9 +2406,7 @@ def _process_import_background_locked(job_id: int):
     Connections: Uses the admin processing pipeline and updates PostgreSQL job state/events; production publishing remains a separate approval step.
 
 
-    """
-    """Process an import while the global PDF-processing lock is held."""
-    with connect() as connection:
+    """with connect() as connection:
         job = connection.execute('SELECT * FROM import_jobs WHERE id=?', (job_id,)).fetchone()
         if not job:
             return
