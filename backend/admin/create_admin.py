@@ -8,11 +8,6 @@ from .security import ROLES, hash_password
 
 
 def main():
-    """Create an admin account from a terminal prompt.
-
-    Connections: Uses backend.admin.db for database access and backend.admin.security to hash the password before storage.
-    """
-
     """Create one administrator account through the protected role/password setup path.
 
     Connections: Uses backend.admin.db for schema/database access and backend.admin.security to validate the role and hash the password before storage.
