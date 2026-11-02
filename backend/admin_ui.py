@@ -1,3 +1,10 @@
+"""Render CETFind administrative pages and their browser-side interface helpers.
+
+backend.main owns authentication, API routes and database operations. It calls
+these page builders to combine shared CSS/JavaScript with the selected admin
+page; browser actions then call the protected endpoints in backend.main.
+"""
+
 from __future__ import annotations
 
 import json
