@@ -5,6 +5,7 @@ import re
 from html import escape
 
 
+# Shared stylesheet used by every page rendered through _shell().
 CSS = r'''
 :root{--bg:#FFFBF4;--panel:#FFFBF4;--ink:#11120D;--muted:#11120D;--line:#D8CFBC;--red:#11120D;--blue:#11120D;--green:#11120D;--amber:#D8CFBC;--purple:#11120D;--shadow:0 8px 28px rgba(17,18,13,.06);--sidebar:250px}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}button{cursor:pointer;border:0}.side{position:fixed;z-index:20;inset:0 auto 0 0;width:var(--sidebar);background:#FFFBF4;border-right:1px solid var(--line);padding:18px 14px}.brand{display:flex;gap:12px;align-items:center;padding:4px 10px 22px}.mark{width:30px;color:var(--red);font-size:31px;font-weight:900}.brand-tortoise{width:34px;height:auto;display:block;overflow:visible}.brand b{display:block;font-size:18px}.brand span{font-size:12px;color:var(--muted)}.nav{display:grid;gap:5px}.nav a{padding:11px 13px;border-radius:9px;color:#11120D;font-size:14px;transition:background .2s,transform .2s,color .2s}.nav a:hover{background:#D8CFBC;color:var(--red);transform:translateX(2px)}.nav a.active{background:#D8CFBC;color:var(--red);font-weight:700}.sidefoot{position:absolute;left:26px;bottom:22px;color:var(--muted);font-size:11px;line-height:1.7}.online{color:#11120D}.main{margin-left:var(--sidebar);min-height:100vh}.top{position:sticky;top:0;z-index:10;height:64px;background:rgba(255,255,255,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 26px}.search{width:min(530px,52vw);height:36px;background:#D8CFBC;border:1px solid #D8CFBC;border-radius:9px;display:flex;align-items:center;gap:10px;padding:0 13px;color:var(--muted);font-size:13px}.user{display:flex;align-items:center;gap:12px;font-size:13px}.avatar{width:30px;height:30px;border-radius:50%;background:#11120D;color:#FFFBF4;display:grid;place-items:center;font-size:11px}.content{padding:27px 26px 40px;max-width:1550px}.title{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:23px}.title h1{margin:0;font-size:31px;letter-spacing:-1px}.title p{margin:5px 0;color:var(--muted);font-size:14px}.live{font-size:12px;color:#11120D;display:flex;align-items:center;gap:7px}.dot{width:7px;height:7px;border-radius:50%;background:#11120D;box-shadow:0 0 0 0 rgba(16,185,129,.5);animation:pulse 1.8s infinite}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);transition:transform .2s,box-shadow .2s,border-color .2s}.card:hover{transform:translateY(-1px);box-shadow:0 12px 32px rgba(20,33,61,.08)}.kpi{padding:18px 19px;min-height:125px}.khead{display:flex;align-items:center;gap:12px;color:#11120D;font-size:13px}.ki{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-size:19px}.sky{background:#D8CFBC;color:#11120D}.rose{background:#D8CFBC;color:#e11d2e}.mint{background:#D8CFBC;color:#0a9c70}.lav{background:#D8CFBC;color:#11120D}.num{font-size:28px;font-weight:800;margin:6px 0 0 55px;transition:color .25s}.trend{font-size:12px;margin-left:55px}.up{color:#11120D}.warn{color:#11120D}.layout{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(300px,.8fr);gap:14px}.panel{padding:18px}.panel h2{font-size:15px;margin:0}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}.muted{color:var(--muted)}.small{font-size:12px}.pipeline{display:flex;gap:3px;overflow:auto;padding:4px 0}.stage{min-width:85px;flex:1;text-align:center;position:relative}.stage:not(:last-child):after{content:'→';position:absolute;right:-4px;top:10px;color:#D8CFBC}.si{width:42px;height:42px;margin:auto;border-radius:50%;background:#D8CFBC;color:#11120D;display:grid;place-items:center;transition:transform .25s,box-shadow .25s}.stage.active .si{animation:floatPulse 1.5s infinite;box-shadow:0 0 0 5px rgba(37,99,235,.08)}.stage.done .si{background:#D8CFBC;color:#0a9c70}.stage.warn .si{background:#FFFBF44dc;color:#11120D}.stage.review .si{background:#D8CFBC;color:#e11d2e}.stage.publish .si{background:#D8CFBC;color:#0a9c70}.stage b{display:block;font-size:10px;margin-top:8px;color:#11120D;line-height:1.25}.stage small{font-size:10px;color:var(--muted)}.recent{margin-top:14px}.tablewrap{overflow:auto}.table{width:100%;border-collapse:collapse;font-size:12px}.table th{background:#FFFBF4;color:#11120D;text-align:left;padding:10px 9px;position:sticky;top:0}.table td{padding:11px 9px;border-bottom:1px solid var(--line);color:#11120D}.table tbody tr{transition:background .15s}.table tbody tr:hover{background:#FFFBF4}.status{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;font-size:10px;font-weight:800;white-space:nowrap}.status:before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}.status.loading:before{animation:statusSpin .8s linear infinite;box-shadow:0 0 0 2px currentColor}.pdfspin{display:inline-block;width:11px;height:11px;margin-right:7px;border:2px solid #D8CFBC;border-top-color:#11120D;border-radius:50%;vertical-align:-1px;animation:pdfSpin .75s linear infinite}.processbtn{width:34px;height:34px;padding:0;border:1px solid #D8CFBC;background:#FFFBF4;color:#11120D;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:15px}.processbtn:hover{background:#D8CFBC}.processbtn.stop{border-color:#f1c8cd;background:#FFFBF47f8;color:#11120D}.processbtn.retry{border-color:#bfe5d5;background:#FFFBF4;color:#11120D}.activityspin{display:inline-block;width:15px;height:15px;border:2px solid #D8CFBC;border-top-color:#11120D;border-right-color:#11120D;border-radius:50%;animation:pdfSpin .8s linear infinite;vertical-align:-3px}.red{background:#D8CFBC;color:#11120D}.green{background:#e4f8ef;color:#11120D}.blue{background:#D8CFBC;color:#11120D}.purple{background:#D8CFBC;color:#11120D}.amber{background:#FFFBF44dc;color:#11120D}.gray{background:#D8CFBC;color:#11120D}.sidepanel{display:grid;gap:14px}.trendbox{height:220px;display:flex;flex-direction:column}.bars{flex:1;display:flex;align-items:flex-end;gap:9px;padding:15px 8px 4px;border-bottom:1px solid var(--line)}.barcol{flex:1;height:100%;display:flex;align-items:flex-end;gap:4px}.bar{width:50%;border-radius:5px 5px 0 0;background:#D8CFBC;transition:height .7s cubic-bezier(.2,.7,.2,1)}.bar.g{background:#11120D}.health{display:grid}.hr{display:grid;grid-template-columns:32px 1fr auto;align-items:center;gap:9px;padding:11px 0;border-bottom:1px solid var(--line);font-size:12px}.hr:last-child{border-bottom:0}.hi{width:30px;height:30px;border-radius:8px;background:#D8CFBC;display:grid;place-items:center}.healthy{color:#11120D}.danger{color:#11120D}.warning{color:#11120D}.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:8px;padding:9px 13px;font-size:12px;font-weight:700;transition:transform .15s,box-shadow .15s,opacity .15s}.btn:hover{transform:translateY(-1px)}.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}.primary{background:var(--red);color:#FFFBF4;box-shadow:0 4px 12px rgba(225,29,46,.18)}.secondary{background:#D8CFBC;color:#11120D}.success{background:#e4f8ef;color:#11120D}.dangerbtn{background:#D8CFBC;color:#11120D}.ghost{background:transparent;color:#11120D;border:1px solid var(--line)}.filters{display:flex;gap:9px;flex-wrap:wrap}.rowactions{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}.action-placeholder{display:inline-block;width:34px;height:34px;flex:0 0 34px}.dashboard-imports .rowactions .iconbtn,.dashboard-imports .rowactions .trashbtn{width:34px;height:34px;min-width:34px}.upload-quick{min-width:0}.upload-quick h2{font-size:14px;margin:0}.upload-quick input[type=file]{max-width:100%}.iconbtn{width:27px;height:27px;min-width:27px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid #D8CFBC;border-radius:6px;background:#FFFBF4;color:#11120D;font-size:13px;font-weight:700;line-height:1}.iconbtn:hover{background:#D8CFBC}.iconbtn:disabled{opacity:.4;cursor:not-allowed}.status-detail{margin-top:5px;white-space:normal;line-height:1.35}.upload-layout{grid-template-columns:minmax(0,1fr)}.runtime-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.extraction-mini{min-width:0}.extract-live{display:flex;align-items:center;gap:7px;margin-top:5px;min-height:17px}.extract-progress{font-size:17px!important;white-space:nowrap}.extract-file{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}.commit-progress{padding:8px 2px}.commit-progress-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.commit-progress-head strong{margin-left:auto;font-size:24px}.commit-track{height:12px;border-radius:999px;overflow:hidden;background:#D8CFBC;margin:18px 0 10px}.commit-bar{height:100%;width:0;background:#11120D;transition:width .25s ease}.commit-progress-stats{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;font-weight:700}.commit-progress .muted{margin-top:12px;line-height:1.5}.import-queue th:last-child,.import-queue td:last-child{width:1%;white-space:nowrap}.openbtn{min-width:58px}.trashbtn{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #D8CFBC;background:#FFFBF47f8;color:#11120D;border-radius:8px;font-size:15px}.trashbtn:hover{background:#D8CFBC}.trashbtn:disabled{opacity:.35;cursor:not-allowed;background:#FFFBF4;border-color:var(--line);color:#11120D}.input,.select{height:37px;border:1px solid var(--line);background:#FFFBF4;border-radius:8px;padding:0 10px;color:#11120D;outline:none}.input:focus,.select:focus{border-color:#D8CFBC;box-shadow:0 0 0 3px rgba(37,99,235,.08)}.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metric{padding:16px}.metric .label{font-size:11px;color:var(--muted)}.metric .value{font-size:25px;font-weight:800;margin-top:4px}.pagegrid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px}.notice{padding:12px 14px;border-radius:9px;background:#FFFBF4;border:1px solid var(--line);font-size:12px;color:#11120D}.issue{padding:12px 14px;border-left:4px solid var(--amber);background:#FFFBF4af0;border-radius:8px;margin-bottom:8px;font-size:12px}.issue.good{border-left-color:var(--green);background:#FFFBF4}.skeleton{position:relative;overflow:hidden;background:#D8CFBC;border-radius:6px;color:transparent!important}.skeleton:after{content:'';position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.75),transparent);animation:shimmer 1.25s infinite}.empty{text-align:center;padding:42px 18px;color:var(--muted);font-size:13px}.modalback{position:fixed;inset:0;z-index:50;background:rgba(10,20,35,.42);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:18px}.modalback.show{display:flex;animation:fadeIn .18s ease}.modal{width:min(760px,100%);max-height:90vh;overflow:auto;background:#FFFBF4;border-radius:14px;box-shadow:0 25px 80px rgba(0,0,0,.2);animation:modalIn .2s ease}.modalhead{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.modalbody{padding:20px}.modalfoot{padding:15px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}.close{background:#D8CFBC;border-radius:50%;width:32px;height:32px;color:#11120D}.toastbox{position:fixed;right:18px;bottom:18px;z-index:100;display:grid;gap:8px}.toast{background:#11120D;color:#FFFBF4;border-radius:9px;padding:11px 14px;font-size:12px;box-shadow:0 10px 30px rgba(0,0,0,.18);animation:toastIn .25s ease}.toast.ok{background:#11120D}.toast.err{background:#11120D}.timeline{display:grid;gap:0}.event{display:grid;grid-template-columns:20px 1fr;gap:10px;position:relative;padding:0 0 17px}.event:before{content:'';position:absolute;left:8px;top:18px;bottom:0;width:2px;background:#D8CFBC}.event:last-child:before{display:none}.eventdot{width:16px;height:16px;border-radius:50%;background:#D8CFBC;border:4px solid #FFFBF4;box-shadow:0 0 0 1px #D8CFBC;z-index:1}.event.active .eventdot{background:var(--blue);box-shadow:0 0 0 5px rgba(37,99,235,.1);animation:pulse 1.6s infinite}.event h4{margin:0;font-size:12px}.event p{margin:3px 0 0;font-size:11px;color:var(--muted)}pre.json{background:#0f172a;color:#d7e1ef;padding:13px;border-radius:9px;overflow:auto;font-size:11px;max-height:300px}
@@ -586,6 +587,10 @@ button,a.btn,.nav a{touch-action:manipulation;-webkit-tap-highlight-color:transp
 
 
 def _custom_select_script() -> str:
+    """Build the custom dropdown UI while keeping each original select in sync.
+
+    _shell() includes this script, so the enhancement is shared across admin pages.
+    """
     return r'''
 <script>
 (function(){
@@ -647,6 +652,11 @@ def _custom_select_script() -> str:
 
 
 def _shell(title: str, active: str, body: str, extra_js: str = '') -> str:
+    """Wrap page content in the common admin layout and navigation.
+
+    Combines the shared CSS, live indicator, page-specific JavaScript and dropdown script.
+    All page builders return their HTML through this function.
+    """
     links = [
         ('dashboard','⌂','Dashboard','/admin'),
         ('imports','⇧','Import Center','/admin/imports'),
@@ -669,6 +679,11 @@ def _shell(title: str, active: str, body: str, extra_js: str = '') -> str:
 
 
 def _common_js():
+    """Provide shared browser helpers for authenticated admin pages.
+
+    Handles the single-tab session lock, CSRF headers, API requests, status labels and formatting.
+    Page-specific scripts use these helpers instead of repeating request and UI logic.
+    """
     return r'''<script>
 const ADMIN_AUTH_KEY='cet-cap-admin-auth-v1';
 function displayCourseFamily(value){
@@ -821,6 +836,10 @@ async function toggleProcess(id,btn){const d=await api('/admin/api/imports/'+id)
 
 
 def dashboard() -> str:
+    """Build the admin overview from analytics, overview and import API responses.
+
+    The page displays project metrics and recent imports; its browser script refreshes them periodically.
+    """
     body = '''<div class="title"><div><h1>Dashboard</h1></div><div class="live"><span class="dot"></span>Live · <span id="lastRefresh">updating</span></div></div>
 <div class="cards"><div class="card kpi"><div class="khead"><span class="ki sky">⇧</span>Imports Today</div><div class="num" id="today">0</div></div><div class="card kpi"><div class="khead"><span class="ki rose">▤</span>Pending Review</div><div class="num" id="pending">0</div></div><div class="card kpi"><div class="khead"><span class="ki mint">▣</span>Total CAP Records (Cutoffs + Seats)</div><div class="num" id="production">0</div></div><div class="card kpi"><div class="khead"><span class="ki lav">♡</span>Data Health</div><div class="num" id="health">—</div></div></div>
 <div class="card panel" style="margin-bottom:14px"><div class="toolbar"><h2>◌ &nbsp;Website Traffic</h2><span class="muted small">last 30 days</span></div><div class="cards" style="grid-template-columns:repeat(4,1fr);margin-top:14px"><div class="card kpi"><div class="khead">Visitors</div><div class="num" id="siteVisitors">—</div></div><div class="card kpi"><div class="khead">Searches</div><div class="num" id="siteSearches">—</div></div><div class="card kpi"><div class="khead">College Opens</div><div class="num" id="siteCollegeOpens">—</div></div><div class="card kpi"><div class="khead">Website Clicks</div><div class="num" id="siteClicks">—</div></div></div></div>
@@ -834,6 +853,10 @@ async function load(){loadSiteUsage();try{const [o,j]=await Promise.all([api('/a
 
 
 def import_center() -> str:
+    """Build the upload and extraction control page for PDF and CSV imports.
+
+    Its browser script connects to import, local-worker and remote-worker admin APIs to track jobs.
+    """
     body = """<div class="title"><div><h1>Import Center</h1></div><div class="live"><span class="dot"></span><span id="localWorkerStatus">Checking extraction worker…</span></div></div>
 <div class="import-workspace">
   <div class="card metric upload-quick"><div class="label">Upload files</div><form id="uploadForm" style="margin-top:8px"><input id="file" type="file" accept="application/pdf,.pdf,.csv,text/csv" multiple required style="display:block;margin:0 0 8px"><div id="selectedFiles" class="small muted" style="margin-bottom:8px"></div><div id="uploadMetadata" class="small muted" style="margin-bottom:8px"></div><div id="uploadState" class="small muted" style="margin-top:6px"></div><button class="btn primary" id="uploadBtn">Upload</button></form></div>
@@ -985,6 +1008,10 @@ window.refreshAdminData=load;window.__cetAdminRunPoll(load);setInterval(()=>wind
 
 
 def review_center() -> str:
+    """Build the staged-import review page.
+
+    The page loads review data and import details through admin APIs before an import is approved or rejected.
+    """
     body='''<div class="title"><div><h1>Review Center</h1></div><div class="live"><span class="dot"></span>Auto-refresh · 5s</div></div>
 <div class="grid4"><div class="card metric"><div class="label">Awaiting Review</div><div class="value" id="mReview">0</div></div><div class="card metric"><div class="label">Committing</div><div class="value" id="mCommit">0</div></div><div class="card metric"><div class="label">Staged Rows</div><div class="value" id="mRows">0</div></div><div class="card metric"><div class="label">Validation Issues</div><div class="value" id="mIssues">0</div></div></div>
 <div class="card panel" style="margin-top:14px"><div class="toolbar"><div class="filters"><input id="q" class="input" placeholder="Search file, job, course…"><select id="status" class="select"><option value="">All statuses</option><option>STAGED</option><option>REVIEW_REQUIRED</option><option>COMMITTING</option></select><select id="year" class="select"><option value="">All years</option></select></div></div><div class="tablewrap"><table class="table"><thead><tr><th>Metadata</th><th>Rows</th><th>Status</th><th>Updated</th><th>Action</th></tr></thead><tbody id="list"><tr><td colspan="5" class="skeleton">Loading</td></tr></tbody></table></div></div>
@@ -1054,6 +1081,10 @@ window.refreshAdminData=load;window.__cetAdminRunPoll(load);setInterval(()=>wind
 
 
 def releases_page(active: str = 'releases', title: str = 'Releases') -> str:
+    """Build the release history and management page.
+
+    Loads release and import information from admin APIs and uses the arguments to set its title and active tab.
+    """
     body='''<div class="title"><div><h1>Releases</h1></div><div class="live"><span class="dot"></span>Live state</div></div><div class="grid4 release-metrics"><div class="card metric"><div class="label">Total Releases</div><div class="value" id="total">0</div></div><div class="card metric"><div class="label">Ready to Publish</div><div class="value" id="ready">0</div></div><div class="card metric"><div class="label">Latest Status</div><div class="value" id="latest" style="font-size:18px">—</div></div></div><div class="card panel" style="margin-top:14px"><div class="toolbar"><h2>Release History</h2></div><div class="tablewrap"><table class="table"><thead><tr><th>Metadata</th><th>Status</th><th>Created</th><th>Action</th></tr></thead><tbody id="list"></tbody></table></div></div>'''
     js=_common_js()+r'''<script>
 const releaseDeleteState=new Map();
@@ -1067,6 +1098,10 @@ async function purge(id,button){if(!confirm('Permanently delete this rolled-back
 
 
 def derived_data() -> str:
+    """Build the CET Data Calculator administration page.
+
+    Its browser script checks derived-data status and sends build, retry and clear requests to the backend.
+    """
     body='''<div class="title"><div><h1>CET Data Calculator</h1></div><div class="live"><span class="dot"></span>Admin controlled</div></div>
 <div class="pagegrid derived-grid"><div class="card panel derived-build-card"><div class="toolbar"><h2>Build derived data</h2></div>
 <div class="filters" style="margin-top:14px"><div class="course-picker" id="coursePicker"><select id="course" class="select" style="display:none" aria-hidden="true"><option value="">All courses in production DB</option></select><button type="button" id="coursePickerTrigger" class="course-picker-trigger" aria-haspopup="listbox" aria-expanded="false" onclick="toggleCoursePicker()"><span id="coursePickerLabel">All courses in production DB</span></button><div id="coursePickerMenu" class="course-picker-menu" role="listbox" aria-label="Choose course"></div></div><button id="buildBtn" class="btn primary" onclick="startBuild()">▶ Calculate & Store</button><button id="clearBuildBtn" class="btn" onclick="clearCalculatedData()">Clear calculated data</button></div>
@@ -1151,6 +1186,10 @@ window.refreshAdminData=load;window.__cetAdminRunPoll(load);setInterval(()=>wind
 
 
 def health_page() -> str:
+    """Build the production data health page using the backend health endpoint.
+
+    The browser script turns the returned health checks and dataset counts into the page display.
+    """
     body='''<div class="title"><div><h1>Data Health</h1></div><div class="live"><span class="dot"></span>Continuous checks</div></div><div class="card panel" id="overall" style="margin-bottom:14px">Checking health…</div><div class="grid4 health-metrics" id="metrics"></div><div class="card panel" style="margin-top:14px"><div class="toolbar"><h2>Production Data</h2><span class="muted small" id="refreshAt">—</span></div><div class="tablewrap"><table class="table"><thead><tr><th>Dataset</th><th>Rows</th><th>State</th></tr></thead><tbody id="counts"></tbody></table></div></div>'''
     js=_common_js()+r'''<script>
 async function load(){try{const d=await api('/admin/api/health');const c=d.counts||{},r=d.runtime||{},ok=!!d.ok&&!!r.site_exists;document.querySelector('#overall').innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><b style="font-size:18px">${ok?'System healthy':'Attention required'}</b><div class="small muted">${ok?'Core runtime checks are passing.':'One or more checks need attention.'}</div></div><span class="status ${ok?'green':'red'}">${ok?'HEALTHY':'CHECK'}</span></div>`;const names=[['Institutes','institutes'],['Programs','programs'],['Cutoffs','cutoffs']];const issues=[];if(!r.site_exists)issues.push('Published site directory is missing.');if((c.programs||0)===0)issues.push('Programs table is empty.');document.querySelector('#metrics').innerHTML=names.map(([n,k])=>`<div class="card metric"><div class="label">${n}</div><div class="value">${Number(c[k]||0).toLocaleString()}</div></div>`).join('')+`<div class="card metric detected-issues"><div class="label">Detected Issues</div><div class="value">${issues.length}</div><div id="issues" class="small muted issue-summary">${issues.length?issues.map(esc).join(' · '):'No obvious issues detected.'}</div></div>`;document.querySelector('#counts').innerHTML=Object.entries(c).map(([k,v])=>`<tr><td>${esc(k.replaceAll('_',' '))}</td><td><b>${Number(v).toLocaleString()}</b></td><td>${Number(v)>0||['audit_log','import_jobs'].includes(k)?badge('HEALTHY'):badge('EMPTY')}</td></tr>`).join('');document.querySelector('#refreshAt').textContent='Updated '+new Date().toLocaleTimeString()}catch(e){toast(e.message,'err')}}window.refreshAdminData=load;window.__cetAdminRunPoll(load);setInterval(()=>window.__cetAdminRunPoll(load),15000);
@@ -1159,6 +1198,10 @@ async function load(){try{const d=await api('/admin/api/health');const c=d.count
 
 
 def audit_page(rows) -> str:
+    """Render the audit records supplied by the backend route.
+
+    Serializes the rows into the page so browser-side search can filter them without another API request.
+    """
     data = json.dumps(rows,ensure_ascii=False,default=str).replace('</','<\\/')
     body='''<div class="title"><div><h1>Audit Log</h1></div><div class="live">''' + '<span class="dot"></span>Last 200 events</div></div>' + '''<div class="card panel"><div class="toolbar"><div class="filters"><input id="q" class="input" placeholder="Search user, action, entity, reason…"></div><span class="muted small" id="count"></span></div><div class="tablewrap"><table class="table"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Entity</th><th>Reason</th></tr></thead><tbody id="list"></tbody></table></div></div>'''
     js=_common_js()+f'''<script>const rows={data};const q=document.querySelector('#q');q.addEventListener('input',render);function render(){{const t=q.value.toLowerCase();const d=rows.filter(x=>!t||Object.values(x).some(v=>String(v??'').toLowerCase().includes(t)));document.querySelector('#count').textContent=d.length+' event(s)';document.querySelector('#list').innerHTML=d.map(x=>`<tr><td>${{fmtTime(x.created_at)}}</td><td>${{esc(x.username||'system')}}</td><td>${{badge(x.action)}}</td><td>${{esc(x.entity_type)}} #${{esc(x.entity_id)}}</td><td>${{esc(x.reason||'—')}}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">No audit events match.</td></tr>'}}render();</script>'''
@@ -1166,6 +1209,10 @@ def audit_page(rows) -> str:
 
 
 def feedback_page(rows) -> str:
+    """Render the feedback records supplied by the backend route.
+
+    The page uses the shared API helper to load and update the feedback inbox in the browser.
+    """
     data=json.dumps(rows,ensure_ascii=False,default=str).replace('</','<\\/')
     body = '<div class="title"><div><h1>Public Feedback</h1></div><div class="live"><span class="dot"></span>Live inbox</div></div><div class="grid4"><div class="card metric"><div class="label">Total</div><div class="value" id="total">0</div></div><div class="card metric"><div class="label">New</div><div class="value" id="newCount">0</div></div><div class="card metric"><div class="label">Reviewed</div><div class="value" id="reviewed">0</div></div><div class="card metric"><div class="label">Resolved</div><div class="value" id="resolved">0</div></div></div><div class="card panel" style="margin-top:14px"><div class="toolbar"><div class="filters"><input id="q" class="input" placeholder="Search feedback…"></div></div><div class="tablewrap"><table class="table feedback-table"><thead><tr><th>Time</th><th>Rating</th><th>Feedback</th><th>Status</th></tr></thead><tbody id="list"></tbody></table></div></div>'
     js=_common_js()+f'''<script>
@@ -1181,6 +1228,10 @@ render();window.refreshAdminData=load;setInterval(()=>window.__cetAdminRunPoll(l
 
 
 def live_processing(job_id: int) -> str:
+    """Build the live progress page for one import job.
+
+    Uses job_id to poll import status and events, then exposes the available approve or delete actions.
+    """
     body = f'''<div class="title"><div><h1>Live Processing</h1></div><a class="btn secondary" href="/admin/review">← Review Center</a></div>
 <div class="pagegrid"><div class="card panel"><div class="toolbar"><h2 id="jobTitle">Loading…</h2><span id="jobStatus">—</span></div>
 <div id="meta" class="notice">Loading import metadata…</div>
@@ -1194,6 +1245,10 @@ def live_processing(job_id: int) -> str:
 
 
 def resolver_page(rows) -> str:
+    """Build the college website resolver from the supplied college rows.
+
+    Renders the initial table on the server, then uses resolver APIs for searching, editing and verification.
+    """
     data=json.dumps(rows,ensure_ascii=False,default=str).replace('</','<\\/')
     server_rows = []
     for x in rows:
