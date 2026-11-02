@@ -36,11 +36,13 @@ def validate_website(value):
     if (p.hostname or '').lower() in {'localhost','127.0.0.1','0.0.0.0','::1'}:return None
     return urlunsplit((p.scheme.lower(),p.netloc,p.path or '/',p.query,p.fragment))
 
-def norm(s):return re.sub(r'\s+',' ',re.sub(r'[^A-Z0-9 ]',' ',str(s).upper())).strip()
+def norm(s):
     """Normalize an institute name for comparison by uppercasing and removing punctuation/extra spaces.
 
     Connections: load_and_reconcile() uses this to compare the supplied reference name with the authoritative institute name.
     """
+    return re.sub(r'\s+',' ',re.sub(r'[^A-Z0-9 ]',' ',str(s).upper())).strip()
+
 
 def load_and_reconcile(csv_path, conn):
     """Match enrichment CSV rows to known institute codes and quarantine conflicts or weak name matches.
