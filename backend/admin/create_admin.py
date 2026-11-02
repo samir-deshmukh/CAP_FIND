@@ -1,3 +1,5 @@
+"""Command-line utility for creating a privileged CETFind administrator account."""
+
 import argparse
 import getpass
 
