@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Prefer the managed systemd service; otherwise start the local worker in the background and wait for its health endpoint.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CET_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 VENV="$HOME/.venvs/capfind-local-worker"
