@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS import_errors (
  id SERIAL PRIMARY KEY, job_id INTEGER NOT NULL REFERENCES import_jobs(id) ON DELETE CASCADE,
  severity TEXT NOT NULL, code TEXT, message TEXT NOT NULL, details TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
--- Published release metadata; each release is linked to the import job that supplied it.
+-- Published release metadata — each release is linked to its source import job.
 CREATE TABLE IF NOT EXISTS data_releases (
  id SERIAL PRIMARY KEY, release_key TEXT UNIQUE, source_job_id INTEGER REFERENCES import_jobs(id),
  source_sha256 TEXT, status TEXT, approved_by INTEGER REFERENCES admin_users(id),
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS public_feedback (
  status TEXT NOT NULL DEFAULT 'NEW' CHECK(status IN ('NEW','REVIEWED','RESOLVED','SPAM')),
  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
--- College website/city/address candidates; verified values are synchronized to the public institute registry.
+-- College website, city and address candidates — verified values sync to the public institute registry.
 CREATE TABLE IF NOT EXISTS college_website_resolver (
  institution_code TEXT PRIMARY KEY, institution_name TEXT NOT NULL, city TEXT, website TEXT, address TEXT,
  city_source TEXT, website_source TEXT, address_source TEXT,
