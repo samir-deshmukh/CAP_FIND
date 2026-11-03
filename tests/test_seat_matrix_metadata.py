@@ -93,3 +93,19 @@ def test_admin_import_stores_compact_metadata_once_with_source_job(monkeypatch):
     stored = json.loads(connection.params[7])
     assert stored["course_name"] == "Civil Engineering"
     assert stored["summary_fields"] == {"SI": 60, "MS Seats": 60}
+
+
+def test_compact_type_choicecode_layout_is_detected_for_quarantine():
+    from scripts.seat_matrix_extractor import has_alternate_seat_layout
+
+    tables = [[
+        ["Type", "ChoiceCode", "OPEN", "SC", "ST", "OBC", "EWS"],
+        ["State Level", "123", "10", "2", "1", "4", "1"],
+    ]]
+    assert has_alternate_seat_layout(tables) is True
+
+
+def test_ordinary_unrelated_table_is_not_classified_as_alternate_seat_layout():
+    from scripts.seat_matrix_extractor import has_alternate_seat_layout
+
+    assert has_alternate_seat_layout([[["Institute", "Address"], ["College", "City"]]]) is False

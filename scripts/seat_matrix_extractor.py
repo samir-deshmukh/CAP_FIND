@@ -397,6 +397,26 @@ def parse_course_block(
     return course, long_rows, i
 
 
+def has_alternate_seat_layout(tables: List[List[List[Optional[str]]]]) -> bool:
+    """Detect recognized seat-table signatures that this parser cannot yet map.
+
+    Some PG seat matrices use compact headers such as Type/ChoiceCode and
+    direct category columns. They are real data pages, not blank/non-data
+    pages. Detect them so the audit can flag them for a format-specific parser
+    rather than silently treating the page as ordinary metadata-only OCR.
+    """
+
+    for table in tables:
+        for row in table:
+            cells = [re.sub(r"\s+", "", str(cell or "")).lower() for cell in row]
+            has_choice = any(cell in {"choicecode", "choicecode:"} for cell in cells)
+            has_type = any(cell == "type" for cell in cells)
+            has_category_columns = any(cell in {"open", "sc", "st", "obc", "ews"} for cell in cells)
+            if has_choice and (has_type or has_category_columns):
+                return True
+    return False
+
+
 def parse_page_tables(
     pnum: int,
     tables: List[List[List[Optional[str]]]],
@@ -497,6 +517,7 @@ def fallback_parse_from_text(
         "tfws_seats": None,
         "page": pnum,
         "record_type": "partial_ocr",
+        "validation_status": "quarantined_incomplete_metadata_only",
     }
 
 
@@ -575,6 +596,7 @@ def process_single_pdf(
             has_choice_code_table = any(
                 any(r and r[0] == "Choice Code" for r in t) for t in tables
             )
+            alternate_layout_detected = not has_choice_code_table and has_alternate_seat_layout(tables)
             needs_ocr = force_ocr or (not has_choice_code_table and len(text) < MIN_NATIVE_TEXT_LEN)
 
             method = "native"
@@ -592,6 +614,11 @@ def process_single_pdf(
 
             try:
                 courses, long_rows = ([], [])
+                if alternate_layout_detected:
+                    raise ParseError(
+                        f"page {pnum}: recognized alternate Type/ChoiceCode seat-table layout; "
+                        "format-specific mapping is required, so no rows were accepted"
+                    )
                 if has_choice_code_table:
                     courses, long_rows = parse_page_tables(
                         pnum, tables, institution_code, institution_name, university
