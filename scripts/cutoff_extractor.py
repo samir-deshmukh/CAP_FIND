@@ -147,6 +147,7 @@ SECTION_NAMES = [
     "State Level",
     "Minority Seats : Minority Seats Allotted to Minority Candidates",
     "Minority Seats : Minority Seats Allotted to Non Minority Candidates",
+    "Minority Seats Allotted to Maharashtra State Candidature Candidates",
 ]
 
 RANK_VALUE_RE = re.compile(
@@ -380,6 +381,9 @@ def detect_section(line: str) -> Optional[str]:
         return SECTION_NAMES[5]
     if "minority seats" in normalized and "non minority" in normalized:
         return SECTION_NAMES[6]
+    if ("minority seats allotted to maharashtra state candidature candidates" in normalized
+            or "minority seats allotted to maharashtra state candidature" in normalized):
+        return SECTION_NAMES[7]
     return None
 
 
@@ -506,6 +510,23 @@ def update_metadata_from_line(
 
 
 # ----------------------------------------------------------------------
+# Source merit metric classification
+# ----------------------------------------------------------------------
+def classify_merit_metric(program_name: str) -> str:
+    """Label the bracketed merit value using the source course family.
+
+    Engineering/UG CAP lists generally publish percentile values. M.E./M.Tech
+    and working-professional PG lists can publish GATE/GPAT scores or degree
+    marks, so those values must not be blindly called percentiles.
+    """
+
+    name = (program_name or "").lower()
+    if any(token in name for token in ("m.e.", "m.e ", "m.tech", "working professional", "mewp")):
+        return "score_or_marks_source_label_required"
+    return "percentile"
+
+
+# ----------------------------------------------------------------------
 # Structured page parser
 # ----------------------------------------------------------------------
 def parse_structured_page(
@@ -590,10 +611,14 @@ def parse_structured_page(
             ]
             if not values:
                 continue
+            # Text extraction collapses blank PDF cells. If the value count
+            # does not match the category header count, sequential pairing is
+            # unsafe: leave categories blank for this segment for review.
+            category_alignment_safe = len(values) == len(pending_categories)
             for val in values:
                 cat = (
                     pending_categories[cat_cursor]
-                    if cat_cursor < len(pending_categories)
+                    if category_alignment_safe and cat_cursor < len(pending_categories)
                     else ""
                 )
                 cat_cursor += 1
@@ -604,6 +629,8 @@ def parse_structured_page(
                     "section": current_section,
                     "stage": current_stage,
                     "category": cat,
+                    "category_mapping_status": "aligned_by_text_count" if category_alignment_safe else "ambiguous_count_mismatch",
+                    "merit_metric": classify_merit_metric(metadata.get("program_name", "")),
                     "rank": val["rank"],
                     "rank_number": val["rank_number"],
                     "rank_suffix": val["rank_suffix"],
@@ -1069,7 +1096,7 @@ def process_single_pdf(
 CSV_FIELDS = [
     "source_pdf", "page", "institution_code", "institution_name",
     "program_code", "program_name", "status", "home_university",
-    "section", "stage", "category", "rank", "rank_number", "rank_suffix",
+    "section", "stage", "category", "category_mapping_status", "merit_metric", "rank", "rank_number", "rank_suffix",
     "percentage", "percentage_raw", "raw_value", "source", "merged_from",
 ]
 
