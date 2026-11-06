@@ -232,3 +232,38 @@ def test_import_name_recovery_skips_query_when_no_codes():
             raise AssertionError("Should not query without missing names")
 
     assert _import_names_for_codes(FakeConnection(), []) == {}
+
+
+def test_placeholder_institution_names_match_only_their_own_code():
+    from backend.admin.resolver import _is_placeholder_institution_name
+
+    assert _is_placeholder_institution_name('', '01002')
+    assert _is_placeholder_institution_name(' 01002 ', '01002')
+    assert _is_placeholder_institution_name('01002', '01002')
+    assert not _is_placeholder_institution_name('Government College of Engineering', '01002')
+
+
+def test_reference_contacts_ignores_conflicting_names_and_keeps_unique_names(tmp_path, monkeypatch):
+    from backend.admin import resolver
+
+    contacts = tmp_path / 'institute_contacts.csv'
+    contacts.write_text(
+        'college_code,college_name,city,website\n'
+        '01002,Example College,Pune,https://example.edu\n'
+        '01002,Example College,Pune,https://example.edu\n'
+        '01003,College Name A,Nagpur,\n'
+        '01003,College Name B,Nagpur,\n'
+        '01004,01004,Akola,\n',
+        encoding='utf-8',
+    )
+    monkeypatch.setattr(resolver, 'CONTACTS', contacts)
+
+    result = resolver._reference_contacts()
+
+    assert result['01002'] == {
+        'institution_name': 'Example College',
+        'city': 'Pune',
+        'website': 'https://example.edu/',
+    }
+    assert result['01003']['institution_name'] is None
+    assert result['01004']['institution_name'] is None

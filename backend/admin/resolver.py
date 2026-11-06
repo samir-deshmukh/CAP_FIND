@@ -354,19 +354,28 @@ def seed_from_contacts(conn):
             conn.execute("UPDATE institutes SET city=COALESCE(?,city), website=COALESCE(?,website), city_source=CASE WHEN ? IS NOT NULL THEN 'reference_csv' ELSE city_source END, website_source=CASE WHEN ? IS NOT NULL THEN 'reference_csv' ELSE website_source END, verified_at=CURRENT_TIMESTAMP WHERE institution_code=?",(city,w,city,w,code)); n+=1
     return n
 
-def _reference_contacts():
-    """Load institute contact records from the maintained CSV, including older headerless format.
+def _is_placeholder_institution_name(value, institution_code):
+    """Return True when a stored institution name is blank or only its CAP code."""
 
+    name = str(value or '').strip()
+    code = str(institution_code or '').strip()
+    return not name or (bool(code) and name.casefold() == code.casefold())
+
+
+def _reference_contacts():
+    """Load only unambiguous college names and contact fields from the reference CSV.
+
+    Duplicate rows with the same value are harmless. Conflicting values for a
+    code are deliberately left unresolved instead of selecting the last row.
     Connections: Resolver seeding and city inference reuse this normalized reference data.
     """
 
-    contacts = {}
     if not CONTACTS.exists():
-        return contacts
+        return {}
     with CONTACTS.open(newline='', encoding='utf-8-sig') as f:
         rows = list(csv.reader(f))
     if not rows:
-        return contacts
+        return {}
     header = [str(x).strip().lower() for x in rows[0]]
     if {'college_code', 'college_name', 'city', 'website'}.issubset(header):
         data_rows = [dict(zip(header, r)) for r in rows[1:]]
@@ -378,17 +387,31 @@ def _reference_contacts():
              'website': r[3] if len(r) > 3 else ''}
             for r in rows
         ]
-    for r in data_rows:
-        code = str(r.get('college_code', '')).strip()
+
+    values = {}
+    for row in data_rows:
+        code = str(row.get('college_code', '')).strip()
         if not code:
             continue
-        website = str(r.get('website', '')).strip()
-        if website.lower() in {'', 'unknown', 'nan', 'none'}:
-            website = None
+        entry = values.setdefault(code, {'names': set(), 'cities': set(), 'websites': set()})
+        name = str(row.get('college_name', '')).strip()
+        if name and not _is_placeholder_institution_name(name, code):
+            entry['names'].add(name)
+        city = str(row.get('city', '')).strip()
+        if city and city.lower() not in {'unknown', 'nan', 'none'}:
+            entry['cities'].add(city)
+        website = str(row.get('website', '')).strip()
+        if website and website.lower() not in {'unknown', 'nan', 'none'}:
+            normalized = valid_url(website)
+            if normalized:
+                entry['websites'].add(normalized)
+
+    contacts = {}
+    for code, entry in values.items():
         contacts[code] = {
-            'institution_name': str(r.get('college_name', '')).strip() or None,
-            'city': str(r.get('city', '')).strip() or None,
-            'website': valid_url(website) if website else None,
+            'institution_name': next(iter(entry['names'])) if len(entry['names']) == 1 else None,
+            'city': next(iter(entry['cities'])) if len(entry['cities']) == 1 else None,
+            'website': next(iter(entry['websites'])) if len(entry['websites']) == 1 else None,
         }
     return contacts
 
@@ -976,8 +999,7 @@ def sync_institutes_to_resolver(conn):
     placeholder_codes = [
         str(r['institution_code']).strip() for r in rows
         if str(r['institution_code'] or '').strip()
-        and (not str(r['institution_name'] or '').strip()
-             or str(r['institution_name'] or '').strip() == str(r['institution_code']).strip())
+        and _is_placeholder_institution_name(r['institution_name'], r['institution_code'])
         and not str(refs.get(str(r['institution_code']).strip(), {}).get('institution_name') or '').strip()
     ]
     staged_names = _import_names_for_codes(conn, placeholder_codes)
@@ -991,8 +1013,8 @@ def sync_institutes_to_resolver(conn):
         # Imports can temporarily store only the CAP choice code as the name.
         # Prefer the maintained reference name when it is available.
         staged_name = staged_names.get(code, '')
-        name = (ref_name if ref_name and (not db_name or db_name == code)
-                else staged_name if (not db_name or db_name == code) and staged_name
+        name = (ref_name if ref_name and _is_placeholder_institution_name(db_name, code)
+                else staged_name if _is_placeholder_institution_name(db_name, code) and staged_name
                 else db_name or ref_name or staged_name or code)
         # Repair a missing derived institute row from production-backed scope.
         conn.execute(

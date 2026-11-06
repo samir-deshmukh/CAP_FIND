@@ -3309,7 +3309,11 @@ def resolver_api(request: Request):
     with connect() as c:
         return [dict(r) for r in c.execute(
             """SELECT i.institution_code,
-                      COALESCE(NULLIF(r.institution_name,''),NULLIF(i.institution_name,'')) AS institution_name,
+                      COALESCE(
+                        NULLIF(NULLIF(BTRIM(r.institution_name),''),BTRIM(i.institution_code)),
+                        NULLIF(NULLIF(BTRIM(i.institution_name),''),BTRIM(i.institution_code)),
+                        BTRIM(i.institution_code)
+                      ) AS institution_name,
                       COALESCE(r.city,i.city) AS city,
                       COALESCE(r.website,i.website) AS website,
                       COALESCE(r.status,'PENDING') AS status,
@@ -3327,7 +3331,10 @@ def resolver_api(request: Request):
                FROM institutes i
                LEFT JOIN college_website_resolver r
                  ON r.institution_code=i.institution_code
-              ORDER BY LOWER(COALESCE(r.institution_name,i.institution_name))
+              ORDER BY LOWER(COALESCE(
+                NULLIF(NULLIF(BTRIM(r.institution_name),''),BTRIM(i.institution_code)),
+                NULLIF(NULLIF(BTRIM(i.institution_name),''),BTRIM(i.institution_code)),
+                BTRIM(i.institution_code)))
               LIMIT 5000"""
         )]
 
