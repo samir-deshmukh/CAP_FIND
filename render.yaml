@@ -32,8 +32,9 @@ services:
     name: cetfind-test
     runtime: static
     branch: render-test
+    rootDir: site
     buildCommand: echo "No static build required"
-    staticPublishPath: site
+    staticPublishPath: .
     autoDeployTrigger: commit
 
 previews:
