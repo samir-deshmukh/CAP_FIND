@@ -1,0 +1,40 @@
+databases:
+  - name: cetfind-test-db
+    plan: free
+    region: singapore
+    postgresMajorVersion: 16
+
+services:
+  - type: web
+    name: cetfind-test-api
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: render-test
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cetfind-test-db
+          property: connectionString
+      - key: CET_ADMIN_SESSION_SECRET
+        generateValue: true
+      - key: CET_DATA_ALLOWED_ORIGINS
+        value: https://cetfind-test.onrender.com
+      - key: CET_PDF_STORAGE_BACKEND
+        value: local
+
+  - type: web
+    name: cetfind-test
+    runtime: static
+    branch: render-test
+    buildCommand: echo "No static build required"
+    staticPublishPath: site
+    autoDeployTrigger: commit
+
+previews:
+  generation: off
